@@ -1,0 +1,114 @@
+2025-11-28 16:43:11,361 - root - ERROR - Client error: type object 'Qt' has no attribute 'QIntValidator'
+2025-11-28 16:47:57,378 - root - ERROR - Client error: [Errno 2] No such file or directory: 'client/ui/styles.py'
+2025-11-28 16:49:23,195 - core.client_base - INFO - Connected to TCP server at localhost:5050
+2025-11-28 16:49:58,991 - core.client_base - ERROR - Error receiving message: [WinError 10038] An operation was attempted on something that is not a socket
+2025-11-28 16:49:58,991 - core.client_base - INFO - Disconnected from server
+2025-11-28 16:49:59,093 - core.client_base - INFO - Disconnected from server
+2025-11-28 16:50:33,093 - core.client_base - INFO - Connected to TCP server at localhost:5050
+2025-11-28 16:51:10,000 - core.client_base - INFO - Connected to TCP server at localhost:5050
+2025-11-28 16:51:33,698 - core.client_base - ERROR - Error receiving message: [WinError 10038] An operation was attempted on something that is not a socket
+2025-11-28 16:51:33,698 - core.client_base - INFO - Disconnected from server
+2025-11-28 16:51:33,800 - core.client_base - INFO - Disconnected from server
+2025-11-28 16:51:38,614 - core.client_base - INFO - Disconnected from server
+2025-11-28 16:57:53,592 - core.client_base - INFO - Connected to TCP server at localhost:5050
+2025-11-28 16:59:06,914 - core.client_base - ERROR - Error receiving message: [WinError 10038] An operation was attempted on something that is not a socket
+2025-11-28 16:59:06,914 - core.client_base - INFO - Disconnected from server
+2025-11-28 16:59:10,146 - core.client_base - INFO - Disconnected from server
+2025-11-28 17:02:20,588 - core.client_base - INFO - Connected to TCP server at localhost:5050
+2025-11-28 17:02:20,682 - core.client_base - ERROR - Connection reset by server
+2025-11-28 17:02:58,901 - core.client_base - INFO - Disconnected from server
+2025-11-28 17:02:58,901 - core.client_base - INFO - Disconnected from server
+2025-11-28 17:03:00,789 - core.client_base - INFO - Disconnected from server
+2025-11-28 17:12:17,521 - core.client_base - INFO - Connected to TCP server at localhost:5050
+2025-11-28 17:12:59,278 - core.client_base - ERROR - Error receiving message: [WinError 10038] An operation was attempted on something that is not a socket
+2025-11-28 17:12:59,279 - core.client_base - INFO - Disconnected from server
+2025-11-28 17:12:59,280 - core.client_base - INFO - Disconnected from server
+2025-11-28 17:16:13,857 - core.client_base - INFO - Disconnected from server
+2025-11-28 17:17:26,386 - core.client_base - INFO - UDP client ready to send to localhost:5050
+2025-11-28 17:17:41,854 - core.client_base - INFO - UDP client disconnected
+2025-11-28 17:17:41,855 - core.client_base - ERROR - Error receiving UDP message: [WinError 10038] An operation was attempted on something that is not a socket
+2025-11-28 17:17:41,962 - core.client_base - INFO - UDP client disconnected
+2025-11-28 17:17:45,097 - core.client_base - INFO - Connected to TCP server at localhost:5050
+2025-11-28 17:17:57,140 - core.client_base - ERROR - Error receiving message: [WinError 10038] An operation was attempted on something that is not a socket
+2025-11-28 17:17:57,141 - core.client_base - INFO - Disconnected from server
+2025-11-28 17:17:57,142 - core.client_base - INFO - Disconnected from server
+2025-11-28 17:18:01,313 - core.client_base - INFO - UDP client ready to send to localhost:5050
+2025-11-28 17:18:10,320 - core.client_base - ERROR - Error receiving UDP message: [WinError 10038] An operation was attempted on something that is not a socket
+2025-11-28 17:18:10,320 - core.client_base - INFO - UDP client disconnected
+2025-11-28 17:18:10,421 - core.client_base - INFO - UDP client disconnected
+2025-11-28 17:18:12,345 - core.client_base - INFO - UDP client ready to send to localhost:5050
+2025-11-28 17:18:14,485 - core.client_base - ERROR - Error receiving UDP message: [WinError 10038] An operation was attempted on something that is not a socket
+2025-11-28 17:18:14,486 - core.client_base - INFO - UDP client disconnected
+2025-11-28 17:18:14,588 - core.client_base - INFO - UDP client disconnected
+2025-11-28 17:18:16,894 - core.client_base - INFO - Connected to TCP server at localhost:5050
+2025-11-28 17:18:38,725 - core.client_base - ERROR - Error receiving message: [WinError 10038] An operation was attempted on something that is not a socket
+2025-11-28 17:18:38,726 - core.client_base - INFO - Disconnected from server
+2025-11-28 17:18:40,483 - core.client_base - INFO - Disconnected from server
+2025-11-28 17:29:57,351 - core.client_base - INFO - Connected to TCP server at localhost:5050
+2025-11-28 17:29:57,389 - __main__ - ERROR - Connection error: 'ChatClient' object has no attribute 'handle_disconnect'
+2025-11-28 17:32:43,621 - core.client_base - INFO - Connected to TCP server at localhost:5050
+2025-11-28 17:32:43,639 - __main__ - ERROR - Connection error: 'ChatClient' object has no attribute 'handle_disconnect'
+2025-11-28 17:36:16,868 - core.client_base - INFO - Connected to TCP server at localhost:5050
+2025-11-28 17:36:16,892 - core.client_base - INFO - Sent connect message for user: hama
+2025-11-28 17:36:39,467 - core.client_base - INFO - Sent disconnect message
+2025-11-28 17:36:39,569 - core.client_base - INFO - Disconnected from server
+2025-11-28 17:36:39,570 - core.client_base - INFO - Disconnected from server
+2025-11-28 17:36:41,128 - core.client_base - INFO - Disconnected from server
+2025-11-28 17:42:53,291 - core.client_base - INFO - UDP client ready to send to localhost:5050
+2025-11-28 17:42:53,314 - core.client_base - INFO - Sent UDP connect message for user: hamaKey
+2025-11-28 17:43:31,971 - core.client_base - INFO - Sent UDP disconnect message
+2025-11-28 17:43:32,434 - core.client_base - INFO - UDP client disconnected
+2025-11-28 17:43:32,435 - core.client_base - INFO - UDP client disconnected
+2025-11-28 17:43:58,810 - core.client_base - INFO - Connected to TCP server at localhost:5050
+2025-11-28 17:43:58,825 - core.client_base - INFO - Sent connect message for user: hamaKey
+2025-11-28 17:44:06,035 - core.client_base - INFO - Sent disconnect message
+2025-11-28 17:44:06,137 - core.client_base - INFO - Disconnected from server
+2025-11-28 17:44:06,138 - core.client_base - INFO - Disconnected from server
+2025-11-28 17:44:07,025 - core.client_base - INFO - Disconnected from server
+2025-11-28 17:46:30,802 - core.client_base - INFO - UDP client ready to send to localhost:5051
+2025-11-28 17:46:30,822 - core.client_base - INFO - Sent UDP connect message for user: hamakey
+2025-11-28 17:46:34,469 - core.client_base - ERROR - Error receiving UDP message: [WinError 10054] An existing connection was forcibly closed by the remote host
+2025-11-28 17:46:37,700 - core.client_base - ERROR - Error receiving UDP message: [WinError 10054] An existing connection was forcibly closed by the remote host
+2025-11-28 17:46:52,899 - core.client_base - INFO - Sent UDP disconnect message
+2025-11-28 17:46:52,900 - core.client_base - ERROR - Error receiving UDP message: [WinError 10054] An existing connection was forcibly closed by the remote host
+2025-11-28 17:46:52,951 - core.client_base - INFO - UDP client disconnected
+2025-11-28 17:46:52,952 - core.client_base - INFO - UDP client disconnected
+2025-11-28 17:47:00,527 - core.client_base - INFO - UDP client ready to send to localhost:5051
+2025-11-28 17:47:00,536 - core.client_base - INFO - Sent UDP connect message for user: hamakey
+2025-11-28 17:47:29,411 - core.client_base - INFO - Sent UDP disconnect message
+2025-11-28 17:47:29,605 - core.client_base - INFO - UDP client disconnected
+2025-11-28 17:47:29,607 - core.client_base - INFO - UDP client disconnected
+2025-11-28 17:47:31,577 - core.client_base - INFO - UDP client disconnected
+2025-11-28 17:49:05,084 - core.client_base - INFO - Connected to TCP server at localhost:5050
+2025-11-28 17:49:05,101 - core.client_base - INFO - Sent connect message for user: hamakey
+2025-11-28 17:49:12,395 - core.client_base - INFO - Sent disconnect message
+2025-11-28 17:49:12,497 - core.client_base - INFO - Disconnected from server
+2025-11-28 17:49:12,499 - core.client_base - INFO - Disconnected from server
+2025-11-28 17:49:17,824 - core.client_base - INFO - UDP client ready to send to localhost:5051
+2025-11-28 17:49:17,843 - core.client_base - INFO - Sent UDP connect message for user: hamakey
+2025-11-28 17:49:23,291 - core.client_base - INFO - Sent UDP disconnect message
+2025-11-28 17:49:23,351 - core.client_base - INFO - UDP client disconnected
+2025-11-28 17:49:23,352 - core.client_base - INFO - UDP client disconnected
+2025-11-28 17:49:26,913 - core.client_base - INFO - UDP client disconnected
+2025-11-28 17:50:33,018 - core.client_base - INFO - Connected to TCP server at localhost:5050
+2025-11-28 17:50:33,043 - core.client_base - INFO - Sent connect message for user: hamakey
+2025-11-28 17:50:45,891 - core.client_base - INFO - Sent disconnect message
+2025-11-28 17:50:45,996 - core.client_base - INFO - Disconnected from server
+2025-11-28 17:50:45,997 - core.client_base - INFO - Disconnected from server
+2025-11-28 17:50:51,697 - core.client_base - INFO - UDP client ready to send to localhost:5051
+2025-11-28 17:50:51,716 - core.client_base - INFO - Sent UDP connect message for user: hamakey
+2025-11-28 17:51:06,460 - core.client_base - INFO - Sent UDP disconnect message
+2025-11-28 17:51:06,685 - core.client_base - INFO - UDP client disconnected
+2025-11-28 17:51:06,686 - core.client_base - INFO - UDP client disconnected
+2025-11-28 17:51:09,676 - core.client_base - INFO - UDP client disconnected
+2025-11-28 17:53:20,165 - core.client_base - INFO - Connected to TCP server at localhost:5050
+2025-11-28 17:53:20,184 - core.client_base - INFO - Sent connect message for user: hama
+2025-11-28 17:53:24,634 - core.client_base - INFO - Sent disconnect message
+2025-11-28 17:53:24,736 - core.client_base - INFO - Disconnected from server
+2025-11-28 17:53:24,748 - core.client_base - INFO - Disconnected from server
+2025-11-28 17:53:31,063 - core.client_base - INFO - UDP client ready to send to localhost:5051
+2025-11-28 17:53:31,073 - core.client_base - INFO - Sent UDP connect message for user: hama
+2025-11-28 17:53:35,123 - core.client_base - INFO - Sent UDP disconnect message
+2025-11-28 17:53:35,782 - core.client_base - INFO - UDP client disconnected
+2025-11-28 17:53:35,783 - core.client_base - INFO - UDP client disconnected
+2025-11-28 17:53:36,902 - core.client_base - INFO - UDP client disconnected
