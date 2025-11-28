@@ -1,455 +1,488 @@
-#!/usr/bin/env python3
-"""
-Test script for UDP Server implementation.
-Run this to test the server functionality without the GUI.
-"""
-
 import socket
 import threading
 import time
-import json
-import sys
-import os
+from typing import Dict, Any, Tuple, Optional
+from server.core.server_base import ServerBase, ServerProtocol
+from server.core.message_protocol import MessageType, create_message, parse_message
+from server.utils.logger import get_logger
 
-# Add the project root to Python path for imports
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
-# Import using your existing message protocol structure
-try:
-    from server.core.message_protocol import MessageType, create_message, parse_message
-except ImportError as e:
-    print(f"❌ Failed to import message protocol: {e}")
-    sys.exit(1)
+class UDPServer(ServerBase):
+    """
+    UDP server implementation for the chat application.
+    Handles connectionless communication with multiple clients.
+    """
 
-try:
-    from server.core.udp_server import UDPServer
-except ImportError as e:
-    print(f"❌ Failed to import UDPServer: {e}")
-    sys.exit(1)
-
-class UDPServerTester:
-    """Test harness for UDP server functionality"""
-    
-    def __init__(self, host='127.0.0.1', port=5000):
-        self.host = host
-        self.port = port
-        self.server = None
-        self.test_results = []
+    def __init__(self, host: str = 'localhost', port: int = 5050):
+        """
+        Initialize the UDP server.
         
-    def print_test_result(self, test_name, success, message=""):
-        """Print formatted test results"""
-        status = "✅ PASS" if success else "❌ FAIL"
-        print(f"{status} {test_name}")
-        if message:
-            print(f"   ↳ {message}")
-        self.test_results.append((test_name, success, message))
-    
-    def simulate_client(self, client_id, messages, delay=0.1):
-        """Simulate a client sending messages to the server"""
+        Args:
+            host: Host address to bind to
+            port: Port number to listen on
+        """
+        super().__init__(host, port)
+        self.logger = get_logger(__name__)
+        
+        # UDP-specific attributes
+        self.clients: Dict[Tuple[str, int], Dict] = {}  # (ip, port) -> client_info
+        self.client_last_seen: Dict[Tuple[str, int], float] = {}
+        
+        # Thread safety
+        self._lock = threading.RLock()
+        
+        # UDP uses a different thread structure than TCP
+        self.receive_thread: Optional[threading.Thread] = None
+        self.cleanup_thread: Optional[threading.Thread] = None
+
+    def start_server(self) -> bool:
+        """
+        Start the UDP server and begin listening for datagrams.
+        
+        Returns:
+            bool: True if server started successfully, False otherwise
+        """
         try:
-            client_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-            client_socket.settimeout(2.0)
+            if self.is_running:
+                self._notify_status("UDP server is already running", False)
+                return False
             
-            # Send connect message
-            connect_msg = create_message(
-                MessageType.CONNECT,
-                f"TestClient{client_id}",
-                f"client{client_id}"
-            ).encode('utf-8')
-            client_socket.sendto(connect_msg, (self.host, self.port))
-            time.sleep(delay)
+            # Create UDP socket using base class method
+            if not self._create_socket(socket.AF_INET, socket.SOCK_DGRAM):
+                return False
             
-            # Send chat messages
-            for msg in messages:
-                chat_msg = create_message(
-                    MessageType.MESSAGE,
-                    msg,
-                    f"client{client_id}"
-                ).encode('utf-8')
-                client_socket.sendto(chat_msg, (self.host, self.port))
-                time.sleep(delay)
+            # Bind socket using base class method
+            if not self._bind_socket():
+                return False
             
-            # Send disconnect message
-            disconnect_msg = create_message(
-                MessageType.DISCONNECT,
-                "",
-                f"client{client_id}"
-            ).encode('utf-8')
-            client_socket.sendto(disconnect_msg, (self.host, self.port))
+            self.is_running = True
+            self.stop_event.clear()
             
-            client_socket.close()
+            # Start receiving thread
+            self.receive_thread = threading.Thread(target=self._receive_loop, daemon=True)
+            self.receive_thread.start()
+            
+            # Start client cleanup thread
+            self.cleanup_thread = threading.Thread(target=self._cleanup_loop, daemon=True)
+            self.cleanup_thread.start()
+            
+            self._notify_status(f"UDP server started on {self.host}:{self.port}", False)
+            self.logger.info(f"UDP server started on {self.host}:{self.port}")
             return True
             
         except Exception as e:
-            print(f"Client simulation error: {e}")
+            error_msg = f"Failed to start UDP server: {e}"
+            self._notify_status(error_msg, True)
+            self.logger.error(error_msg)
+            self.stop_server()
             return False
-    
-    def test_server_start_stop(self):
-        """Test basic server start and stop functionality"""
-        print("\n🧪 Testing Server Start/Stop...")
+
+    def stop_server(self) -> bool:
+        """
+        Stop the UDP server and clean up resources.
         
+        Returns:
+            bool: True if server stopped successfully, False otherwise
+        """
         try:
-            # Test start
-            self.server = UDPServer(self.host, self.port)
-            success = self.server.start_server()
-            self.print_test_result(
-                "Server Start", 
-                success, 
-                f"Server started on {self.host}:{self.port}"
-            )
+            self.is_running = False
+            self.stop_event.set()
             
-            # Give server time to initialize
-            time.sleep(0.5)
+            if self.socket:
+                self.socket.close()
+                self.socket = None
             
-            # Test is_active
-            is_active = self.server.is_server_running()
-            self.print_test_result(
-                "Server Active Check",
-                is_active,
-                f"Server reports active: {is_active}"
-            )
+            # Clear client data and notify about disconnections
+            with self._lock:
+                disconnected_clients = list(self.clients.keys())
+                self.clients.clear()
+                self.client_last_seen.clear()
             
-            # Test stop
-            stop_success = self.server.stop_server()
-            self.print_test_result(
-                "Server Stop",
-                stop_success,
-                "Server stopped successfully"
-            )
+            # Notify about disconnected clients
+            for client_addr in disconnected_clients:
+                client_identifier = f"{client_addr[0]}:{client_addr[1]}"
+                self._notify_status(f"Client disconnected: {client_identifier}", False)
             
-            return all([success, stop_success])
+            self._notify_status("UDP server stopped", False)
+            self.logger.info("UDP server stopped")
+            return True
             
         except Exception as e:
-            self.print_test_result("Server Start/Stop", False, f"Exception: {e}")
+            error_msg = f"Error stopping UDP server: {e}"
+            self._notify_status(error_msg, True)
+            self.logger.error(error_msg)
             return False
-    
-    def test_single_client_communication(self):
-        """Test communication with a single client"""
-        print("\n🧪 Testing Single Client Communication...")
+
+    def send_message(self, client_identifier: Any, message: str) -> bool:
+        """
+        Send a message to a specific client.
         
+        Args:
+            client_identifier: Client identifier in format "ip:port"
+            message: Message content to send
+            
+        Returns:
+            bool: True if message was sent successfully, False otherwise
+        """
         try:
-            self.server = UDPServer(self.host, self.port)
+            # Parse client identifier - format is "ip:port"
+            if isinstance(client_identifier, str):
+                ip, port_str = client_identifier.split(':')
+                port = int(port_str)
+                client_addr = (ip, port)
+            else:
+                # Assume it's already a tuple (ip, port)
+                client_addr = client_identifier
             
-            # Setup callbacks to capture server events
-            captured_events = []
+            with self._lock:
+                if client_addr not in self.clients:
+                    self.logger.warning(f"Client {client_identifier} not found")
+                    return False
             
-            def status_callback(message, is_error):
-                event_type = "error" if is_error else "status"
-                captured_events.append((event_type, message))
-                print(f"📢 {event_type.upper()}: {message}")
+            # Create message packet using your message protocol
+            message_data = create_message(
+                MessageType.MESSAGE,
+                message,
+                "server"
+            ).encode('utf-8')
             
-            def message_callback(client_info, message):
-                captured_events.append(('message', client_info, message))
-                print(f"💬 MESSAGE from {client_info.get('name', 'Unknown')}: {message}")
-            
-            self.server.set_status_callback(status_callback)
-            self.server.set_message_callback(message_callback)
-            
-            self.server.start_server()
-            time.sleep(0.5)
-            
-            # Simulate client
-            test_messages = ["Hello server!", "How are you?", "Test message 3"]
-            print(f"🤖 Simulating client with messages: {test_messages}")
-            
-            client_thread = threading.Thread(
-                target=self.simulate_client, 
-                args=(1, test_messages)
-            )
-            client_thread.start()
-            
-            # Wait for client to finish
-            client_thread.join(timeout=5)
-            
-            # Give server time to process
-            time.sleep(1)
-            
-            # Check results
-            connected_clients = self.server.get_clients_info()
-            
-            # Verify client connected
-            status_events = [e for e in captured_events if e[0] == 'status' and 'connected' in e[1].lower()]
-            self.print_test_result(
-                "Client Connection",
-                len(status_events) > 0,
-                f"Connection events: {len(status_events)}"
-            )
-            
-            # Verify messages received
-            message_events = [e for e in captured_events if e[0] == 'message']
-            self.print_test_result(
-                "Message Reception",
-                len(message_events) >= len(test_messages),
-                f"Received {len(message_events)}/{len(test_messages)} messages"
-            )
-            
-            # Verify connected clients list
-            self.print_test_result(
-                "Connected Clients List",
-                len(connected_clients) >= 0,
-                f"Clients in list: {len(connected_clients)}"
-            )
-            
-            self.server.stop_server()
-            return len(status_events) > 0 and len(message_events) >= len(test_messages)
+            # Send datagram
+            self.socket.sendto(message_data, client_addr)
+            self.logger.debug(f"Sent message to {client_identifier}: {message}")
+            return True
             
         except Exception as e:
-            self.print_test_result("Single Client Test", False, f"Exception: {e}")
-            if self.server:
-                self.server.stop_server()
+            error_msg = f"Failed to send message to {client_identifier}: {e}"
+            self.logger.error(error_msg)
             return False
-    
-    def test_multiple_clients(self):
-        """Test handling multiple simultaneous clients"""
-        print("\n🧪 Testing Multiple Clients...")
+
+    def broadcast_message(self, message: str, exclude_client: Any = None) -> bool:
+        """
+        Broadcast a message to all connected clients.
         
+        Args:
+            message: Message content to broadcast
+            exclude_client: Client identifier to exclude from broadcast
+            
+        Returns:
+            bool: True if broadcast was successful for all clients, False if any failed
+        """
         try:
-            self.server = UDPServer(self.host, self.port)
+            with self._lock:
+                clients_to_message = list(self.clients.keys())
             
-            # Setup callbacks
-            captured_events = []
+            success = True
+            for client_addr in clients_to_message:
+                client_identifier = f"{client_addr[0]}:{client_addr[1]}"
+                
+                # Skip excluded client
+                if exclude_client and client_identifier == exclude_client:
+                    continue
+                
+                if not self.send_message(client_identifier, message):
+                    success = False
             
-            def status_callback(message, is_error):
-                if not is_error and 'connected' in message.lower():
-                    captured_events.append(('connected', message))
-                elif not is_error and 'disconnected' in message.lower():
-                    captured_events.append(('disconnected', message))
-            
-            self.server.set_status_callback(status_callback)
-            
-            self.server.start_server()
-            time.sleep(0.5)
-            
-            # Simulate multiple clients
-            clients_data = [
-                (1, ["Client 1 message 1", "Client 1 message 2"]),
-                (2, ["Client 2 message 1"]),
-                (3, ["Client 3 message 1", "Client 3 message 2", "Client 3 message 3"])
-            ]
-            
-            threads = []
-            for client_id, messages in clients_data:
-                thread = threading.Thread(
-                    target=self.simulate_client,
-                    args=(client_id, messages, 0.05)
-                )
-                threads.append(thread)
-                thread.start()
-            
-            # Wait for all clients
-            for thread in threads:
-                thread.join(timeout=3)
-            
-            # Give server time to process
-            time.sleep(1)
-            
-            # Check results
-            connection_events = [e for e in captured_events if e[0] == 'connected']
-            disconnect_events = [e for e in captured_events if e[0] == 'disconnected']
-            
-            self.print_test_result(
-                "Multiple Client Connections",
-                len(connection_events) >= len(clients_data),
-                f"Connected: {len(connection_events)}/{len(clients_data)}"
-            )
-            
-            self.print_test_result(
-                "Multiple Client Disconnections", 
-                len(disconnect_events) >= len(clients_data),
-                f"Disconnected: {len(disconnect_events)}/{len(clients_data)}"
-            )
-            
-            self.server.stop_server()
-            return len(connection_events) >= len(clients_data)
-            
-        except Exception as e:
-            self.print_test_result("Multiple Clients Test", False, f"Exception: {e}")
-            if self.server:
-                self.server.stop_server()
-            return False
-    
-    def test_broadcast_message(self):
-        """Test broadcasting messages to all clients"""
-        print("\n🧪 Testing Broadcast Messages...")
-        
-        try:
-            self.server = UDPServer(self.host, self.port)
-            self.server.start_server()
-            time.sleep(0.5)
-            
-            # Manually add test clients to server
-            client1_addr = ('127.0.0.1', 6001)
-            client2_addr = ('127.0.0.1', 6002)
-            
-            self.server.clients[client1_addr] = {
-                'name': 'TestClient1', 
-                'connected_at': time.time(),
-                'address': client1_addr
-            }
-            self.server.clients[client2_addr] = {
-                'name': 'TestClient2', 
-                'connected_at': time.time(),
-                'address': client2_addr
-            }
-            self.server.client_last_seen[client1_addr] = time.time()
-            self.server.client_last_seen[client2_addr] = time.time()
-            
-            # Test broadcast
-            broadcast_message = "Server broadcast test message"
-            success = self.server.broadcast_message(broadcast_message)
-            
-            self.print_test_result(
-                "Broadcast Send Success",
-                success,
-                f"Broadcast returned: {success}"
-            )
-            
-            self.server.stop_server()
+            if success:
+                self.logger.debug(f"Broadcast message to {len(clients_to_message)} clients: {message}")
+            else:
+                self.logger.warning("Some clients failed to receive broadcast message")
+                
             return success
             
         except Exception as e:
-            self.print_test_result("Broadcast Test", False, f"Exception: {e}")
-            if self.server:
-                self.server.stop_server()
+            error_msg = f"Failed to broadcast message: {e}"
+            self.logger.error(error_msg)
             return False
-    
-    def test_client_timeout(self):
-        """Test automatic cleanup of inactive clients"""
-        print("\n🧪 Testing Client Timeout...")
+
+    def handle_client_connection(self, *args, **kwargs):
+        """
+        Handle incoming UDP datagrams.
         
-        try:
-            self.server = UDPServer(self.host, self.port)
-            
-            # Add a test client with old timestamp
-            test_addr = ('127.0.0.1', 9999)
-            self.server.clients[test_addr] = {
-                'name': 'TimeoutTestClient', 
-                'connected_at': time.time(),
-                'address': test_addr
-            }
-            self.server.client_last_seen[test_addr] = time.time() - 35  # 35 seconds old
-            
-            self.server.start_server()
-            
-            # Wait for cleanup cycle
-            time.sleep(6)
-            
-            # Check if client was removed
-            clients_after = self.server.get_clients_info()
-            client_removed = len(clients_after) == 0
-            
-            self.print_test_result(
-                "Client Timeout Cleanup",
-                client_removed,
-                f"Clients after cleanup: {len(clients_after)}"
-            )
-            
-            self.server.stop_server()
-            return client_removed
-            
-        except Exception as e:
-            self.print_test_result("Client Timeout Test", False, f"Exception: {e}")
-            if self.server:
-                self.server.stop_server()
-            return False
-    
-    def run_all_tests(self):
-        """Run all test cases and report results"""
-        print("🚀 Starting UDP Server Tests...")
-        print("=" * 50)
+        Note: For UDP, this is called from the receive loop for each datagram.
+        Unlike TCP, UDP doesn't have persistent connections, so we handle each
+        datagram individually.
+        """
+        # For UDP, client connections are handled in _receive_loop
+        # This method is kept for interface compatibility
+        pass
+
+    def _receive_loop(self):
+        """
+        Main loop for receiving UDP datagrams from clients.
         
-        tests = [
-            self.test_server_start_stop,
-            self.test_single_client_communication,
-            self.test_multiple_clients,
-            self.test_broadcast_message,
-            self.test_client_timeout,
-        ]
+        Runs in a separate thread and continuously listens for incoming datagrams.
+        When a datagram is received, it processes the data and updates client activity.
+        """
+        buffer_size = 4096  # Maximum datagram size
         
-        results = []
-        for test in tests:
+        while self.is_running and self.socket and not self.stop_event.is_set():
             try:
-                result = test()
-                results.append(result)
+                # Receive datagram - this blocks until data is available
+                data, client_addr = self.socket.recvfrom(buffer_size)
+                
+                if not data:
+                    continue
+                
+                # Update client activity
+                self._update_client_activity(client_addr)
+                
+                # Process the received data
+                self._handle_received_data(data, client_addr)
+                
+            except socket.timeout:
+                continue
+            except OSError as e:
+                if self.is_running and not self.stop_event.is_set():
+                    self.logger.error(f"Error receiving UDP data: {e}")
+                break
             except Exception as e:
-                print(f"❌ Test {test.__name__} crashed: {e}")
-                results.append(False)
-            
-            time.sleep(1)  # Brief pause between tests
-        
-        # Summary
-        print("\n" + "=" * 50)
-        print("📊 TEST SUMMARY")
-        print("=" * 50)
-        
-        passed = sum(results)
-        total = len(results)
-        
-        for i, (test_name, success, message) in enumerate(self.test_results):
-            status = "✅ PASS" if success else "❌ FAIL"
-            print(f"{status} {test_name}")
-        
-        print(f"\n🎯 Overall: {passed}/{total} tests passed")
-        
-        if passed == total:
-            print("🎉 All tests passed! UDP server is working correctly.")
-        else:
-            print("💥 Some tests failed. Check the implementation.")
-        
-        return passed == total
+                self.logger.error(f"Unexpected error in receive loop: {e}")
 
-def quick_start_test():
-    """Quick test to verify server can start and basic functionality"""
-    print("🔍 Quick Start Test...")
-    
-    server = UDPServer('127.0.0.1', 5000)
-    
-    try:
-        # Test start
-        if server.start_server():
-            print("✅ Server started successfully")
-            time.sleep(0.5)
+    def _handle_received_data(self, data: bytes, client_addr: Tuple[str, int]):
+        """
+        Handle received UDP datagram data.
+        
+        Args:
+            data: Raw bytes received from the client
+            client_addr: Tuple of (IP, port) identifying the client
+        """
+        try:
+            # Parse message using your message protocol
+            message_str = data.decode('utf-8')
+            message = parse_message(message_str)
             
-            # Test client list
-            clients = server.get_clients_info()
-            print(f"✅ Connected clients: {len(clients)}")
+            if not message:
+                self.logger.warning(f"Invalid message format from {client_addr}")
+                return
             
-            # Test protocol property
-            print(f"✅ Server protocol: {server.protocol.value}")
+            message_type = message.get('type')
+            content = message.get('content', '')
+            sender = message.get('sender', 'unknown')
             
-            # Test server info
-            info = server.get_server_info()
-            print(f"✅ Server info: {info}")
+            client_identifier = f"{client_addr[0]}:{client_addr[1]}"
             
-            # Test stop
-            if server.stop_server():
-                print("✅ Server stopped successfully")
-                return True
+            # Route to appropriate handler based on message type
+            if message_type == MessageType.CONNECT.value:
+                self._handle_client_connect(client_addr, content)
+            elif message_type == MessageType.DISCONNECT.value:
+                self._handle_client_disconnect(client_addr)
+            elif message_type == MessageType.MESSAGE.value:
+                self._handle_chat_message(client_addr, content, sender)
+            elif message_type == MessageType.STATUS.value:
+                self._handle_status_message(client_addr, content)
             else:
-                print("❌ Server failed to stop")
-                return False
-        else:
-            print("❌ Server failed to start")
-            return False
-            
-    except Exception as e:
-        print(f"❌ Quick test failed: {e}")
-        return False
+                self.logger.warning(f"Unknown message type '{message_type}' from {client_identifier}")
+                
+        except Exception as e:
+            self.logger.error(f"Error handling received data from {client_addr}: {e}")
 
-if __name__ == "__main__":
-    import argparse
-    
-    parser = argparse.ArgumentParser(description='Test UDP Server')
-    parser.add_argument('--quick', action='store_true', help='Run quick test only')
-    parser.add_argument('--host', default='127.0.0.1', help='Server host')
-    parser.add_argument('--port', type=int, default=5000, help='Server port')
-    
-    args = parser.parse_args()
-    
-    if args.quick:
-        success = quick_start_test()
-        sys.exit(0 if success else 1)
-    else:
-        tester = UDPServerTester(args.host, args.port)
-        success = tester.run_all_tests()
-        sys.exit(0 if success else 1)
+    def _handle_client_connect(self, client_addr: Tuple[str, int], client_name: str):
+        """
+        Handle new client connection request.
+        
+        Args:
+            client_addr: Tuple of (IP, port) identifying the client
+            client_name: Name provided by the client during connection
+        """
+        client_identifier = f"{client_addr[0]}:{client_addr[1]}"
+        
+        with self._lock:
+            if client_addr not in self.clients:
+                self.clients[client_addr] = {
+                    'name': client_name or f"Client{len(self.clients) + 1}",
+                    'connected_at': time.time(),
+                    'address': client_addr
+                }
+                self.client_last_seen[client_addr] = time.time()
+        
+        self.logger.info(f"Client connected: {client_identifier} ({client_name})")
+        self._notify_status(f"Client connected: {client_identifier}", False)
+        
+        # Notify message callback about connection
+        client_info = {
+            'identifier': client_identifier,
+            'name': client_name,
+            'address': client_addr,
+            'connected_at': time.time()
+        }
+        self._notify_message(client_info, f"{client_name} connected")
+        
+        # Send welcome message using your message protocol
+        welcome_msg = create_message(
+            MessageType.STATUS,
+            f"Welcome to the chat server, {client_name}!",
+            "server"
+        ).encode('utf-8')
+        self.socket.sendto(welcome_msg, client_addr)
+
+    def _handle_client_disconnect(self, client_addr: Tuple[str, int]):
+        """
+        Handle client disconnection request.
+        
+        Args:
+            client_addr: Tuple of (IP, port) identifying the client
+        """
+        client_identifier = f"{client_addr[0]}:{client_addr[1]}"
+        
+        with self._lock:
+            client_info = self.clients.pop(client_addr, None)
+            self.client_last_seen.pop(client_addr, None)
+        
+        if client_info:
+            client_name = client_info.get('name', 'Unknown')
+            self.logger.info(f"Client disconnected: {client_identifier}")
+            self._notify_status(f"Client disconnected: {client_identifier}", False)
+            
+            # Notify message callback about disconnection
+            client_info['identifier'] = client_identifier
+            self._notify_message(client_info, f"{client_name} disconnected")
+
+    def _handle_chat_message(self, client_addr: Tuple[str, int], content: str, sender: str):
+        """
+        Handle incoming chat message from client.
+        
+        Args:
+            client_addr: Tuple of (IP, port) identifying the client
+            content: The actual message content
+            sender: Name of the sender
+        """
+        client_identifier = f"{client_addr[0]}:{client_addr[1]}"
+        
+        with self._lock:
+            client_info = self.clients.get(client_addr, {})
+            client_name = client_info.get('name', 'Unknown')
+        
+        self.logger.debug(f"Received chat message from {client_identifier}: {content}")
+        
+        # Notify message callback about the received message
+        full_client_info = {
+            'identifier': client_identifier,
+            'name': client_name,
+            'address': client_addr,
+            **client_info
+        }
+        self._notify_message(full_client_info, content)
+        
+        # Send delivery confirmation
+        echo_msg = create_message(
+            MessageType.STATUS,
+            "Message delivered",
+            "server"
+        ).encode('utf-8')
+        self.socket.sendto(echo_msg, client_addr)
+
+    def _handle_status_message(self, client_addr: Tuple[str, int], content: str):
+        """
+        Handle status message from client (can be used for heartbeats).
+        
+        Args:
+            client_addr: Tuple of (IP, port) identifying the client
+            content: Status content
+        """
+        self._update_client_activity(client_addr)
+        self.logger.debug(f"Status message from {client_addr}: {content}")
+
+    def _update_client_activity(self, client_addr: Tuple[str, int]):
+        """
+        Update client's last seen timestamp.
+        
+        Args:
+            client_addr: Tuple of (IP, port) identifying the client
+        """
+        with self._lock:
+            self.client_last_seen[client_addr] = time.time()
+
+    def _cleanup_loop(self):
+        """
+        Background thread to clean up inactive clients.
+        
+        Periodically checks for clients that haven't been active recently
+        and removes them from the connected clients list.
+        """
+        CLIENT_TIMEOUT = 30  # seconds
+        
+        while self.is_running and not self.stop_event.is_set():
+            try:
+                current_time = time.time()
+                disconnected_clients = []
+                
+                # Identify clients that haven't been seen recently
+                with self._lock:
+                    for client_addr, last_seen in self.client_last_seen.items():
+                        if current_time - last_seen > CLIENT_TIMEOUT:
+                            disconnected_clients.append(client_addr)
+                
+                # Remove timed out clients
+                for client_addr in disconnected_clients:
+                    self._handle_client_disconnect(client_addr)
+                    self.logger.info(f"Client {client_addr} timed out")
+                
+                time.sleep(5)  # Check every 5 seconds
+                
+            except Exception as e:
+                self.logger.error(f"Error in client cleanup loop: {e}")
+                time.sleep(5)
+
+    def get_client_count(self) -> int:
+        """
+        Get number of connected clients.
+        
+        Returns:
+            int: Number of connected clients
+        """
+        with self._lock:
+            return len(self.clients)
+
+    def get_clients_info(self) -> Dict[Any, Dict]:
+        """
+        Get information about all connected clients.
+        
+        Returns:
+            Dict: Dictionary of client information
+        """
+        with self._lock:
+            clients_info = {}
+            for client_addr, client_info in self.clients.items():
+                client_identifier = f"{client_addr[0]}:{client_addr[1]}"
+                clients_info[client_identifier] = {
+                    'identifier': client_identifier,
+                    'name': client_info.get('name', 'Unknown'),
+                    'address': client_addr,
+                    'connected_at': client_info.get('connected_at', 0),
+                    'last_activity': self.client_last_seen.get(client_addr, 0)
+                }
+            return clients_info
+
+    @property
+    def protocol(self) -> ServerProtocol:
+        """
+        Return the server protocol type.
+        
+        Returns:
+            ServerProtocol: UDP protocol enum value
+        """
+        return ServerProtocol.UDP
+
+    def is_server_running(self) -> bool:
+        """
+        Check if server is running.
+        
+        Returns:
+            bool: True if server is running, False otherwise
+        """
+        return self.is_running
+
+    def get_server_info(self) -> Dict[str, Any]:
+        """
+        Get server information.
+        
+        Returns:
+            Dict: Server information dictionary
+        """
+        return {
+            'host': self.host,
+            'port': self.port,
+            'protocol': self.protocol.value,
+            'running': self.is_running,
+            'clients_count': self.get_client_count()
+        }
