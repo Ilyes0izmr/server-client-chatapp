@@ -1,0 +1,159 @@
+/* Main Window */
+QMainWindow, QWidget {
+    background-color: #0D0D0D;
+    color: #E0E0E0;
+    font-family: 'Segoe UI', Arial, sans-serif;
+}
+
+/* Group Boxes - MAKE THEM INTERACTIVE */
+QGroupBox {
+    background-color: #1A1A1A;
+    border: 2px solid #333;
+    border-radius: 8px;
+    margin-top: 10px;
+    padding-top: 15px;
+    font-weight: bold;
+    color: #E0E0E0;
+    font-size: 14px;
+}
+
+QGroupBox::title {
+    color: #E0E0E0;
+    subcontrol-origin: margin;
+    left: 12px;
+    padding: 0 8px 0 8px;
+    background-color: #1A1A1A;
+}
+
+/* Input Fields - MAKE THEM VISIBLE */
+QLineEdit {
+    background-color: #2D2D2D;
+    color: #E0E0E0;
+    border: 2px solid #444;
+    border-radius: 6px;
+    padding: 10px;
+    font-size: 14px;
+    selection-background-color: #555;
+    margin: 5px;
+}
+
+QLineEdit:focus {
+    border-color: #666;
+    background-color: #333;
+}
+
+QLineEdit::placeholder {
+    color: #888;
+    font-style: italic;
+}
+
+/* Radio Buttons - MAKE THEM VISIBLE AND INTERACTIVE */
+QRadioButton {
+    color: #E0E0E0;
+    spacing: 12px;
+    font-size: 14px;
+    padding: 8px;
+    background-color: transparent;
+}
+
+QRadioButton::indicator {
+    width: 20px;
+    height: 20px;
+    border-radius: 10px;
+    border: 2px solid #666;
+    background-color: #2D2D2D;
+}
+
+QRadioButton::indicator:checked {
+    background-color: #E0E0E0;
+    border-color: #E0E0E0;
+}
+
+QRadioButton::indicator:hover {
+    border-color: #888;
+}
+
+QRadioButton:checked {
+    color: #FFFFFF;
+    font-weight: bold;
+}
+
+/* Buttons */
+QPushButton {
+    background-color: #333;
+    color: #E0E0E0;
+    border: 2px solid #444;
+    border-radius: 8px;
+    padding: 12px 20px;
+    font-weight: bold;
+    font-size: 14px;
+    min-height: 25px;
+}
+
+QPushButton:hover {
+    background-color: #404040;
+    border-color: #555;
+}
+
+QPushButton:pressed {
+    background-color: #262626;
+}
+
+QPushButton:disabled {
+    background-color: #1A1A1A;
+    color: #666;
+    border-color: #333;
+}
+
+/* Connect Button */
+QPushButton[class="connect-button"] {
+    background-color: #2D5A2D;
+    border-color: #3D6A3D;
+}
+
+QPushButton[class="connect-button"]:hover {
+    background-color: #357535;
+    border-color: #457A45;
+}
+
+QPushButton[class="connect-button"]:pressed {
+    background-color: #245224;
+}
+
+QPushButton[class="connect-button"]:disabled {
+    background-color: #1A2A1A;
+    color: #666;
+    border-color: #2D3A2D;
+}
+
+/* Labels */
+QLabel {
+    color: #E0E0E0;
+    font-size: 14px;
+    background-color: transparent;
+    padding: 2px;
+}
+
+QLabel.title {
+    font-size: 24px;
+    font-weight: bold;
+    color: #FFFFFF;
+}
+
+QLabel.subtitle {
+    font-size: 13px;
+    color: #AAA;
+}
+
+/* Make sure everything is visible and interactive */
+* {
+    background-color: #0D0D0D;
+}
+
+QGroupBox * {
+    background-color: #1A1A1A;
+}
+
+QRadioButton, QLineEdit, QPushButton {
+    background-color: #2D2D2D;
+}
