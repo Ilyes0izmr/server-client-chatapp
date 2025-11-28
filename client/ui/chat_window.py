@@ -1,177 +1,205 @@
-from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QTextEdit, 
-                            QLineEdit, QPushButton, QStatusBar, QMainWindow,
-                            QLabel, QFrame)
-from PyQt6.QtCore import pyqtSignal, Qt, QDateTime
-from PyQt6.QtGui import QTextCursor, QFont, QTextCharFormat, QTextCursor
-import logging
-import time
+from PyQt6.QtWidgets import (
+    QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
+    QTextEdit, QPushButton, QLabel, QStatusBar
+)
+from PyQt6.QtCore import Qt, pyqtSignal, QDateTime
+from PyQt6.QtGui import QTextCursor, QFont
+from pathlib import Path
+
+from PyQt6.QtWidgets import QTextEdit
+from PyQt6.QtGui import QKeyEvent
+from PyQt6.QtCore import Qt
+
+class MessageInput(QTextEdit):
+    '''
+        to add custom behavior for ENTER key
+    '''
+    enter_pressed = pyqtSignal()  # signal to tell ChatWindow to send
+
+    def __init__(self):
+        super().__init__()
+
+    def keyPressEvent(self, event: QKeyEvent):
+        # SHIFT + ENTER → newline
+        if event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
+            if event.modifiers() == Qt.KeyboardModifier.ShiftModifier:
+                return super().keyPressEvent(event)
+
+            # ENTER alone → send
+            self.enter_pressed.emit()
+            return  # block normal newline
+
+        # otherwise normal behavior
+        return super().keyPressEvent(event)
+
 
 class ChatWindow(QMainWindow):
-    """Main chat interface window with black monochrome theme"""
-    
+
     message_sent = pyqtSignal(str)
     disconnected = pyqtSignal()
-    
+
     def __init__(self, username, host, port, protocol):
         super().__init__()
         self.username = username
         self.host = host
         self.port = port
         self.protocol = protocol
-        self.logger = logging.getLogger(__name__)
         self.init_ui()
-    
+        self.apply_styles()
+
     def init_ui(self):
-        """Initialize the UI"""
-        self.setWindowTitle(f"Chat Client - {self.username} | {self.host}:{self.port} ({self.protocol})")
-        self.setGeometry(200, 200, 800, 600)
-        
-        # Central widget
-        central_widget = QWidget()
-        self.setCentralWidget(central_widget)
-        
-        # Main layout
-        layout = QVBoxLayout()
-        layout.setSpacing(10)
-        layout.setContentsMargins(15, 15, 15, 15)
-        central_widget.setLayout(layout)
-        
+        self.setWindowTitle(f"Chat - {self.username}")
+        self.resize(900, 600)
+
+        central = QWidget()
+        self.setCentralWidget(central)
+
+        layout = QVBoxLayout(central)
+        layout.setContentsMargins(20, 20, 20, 20)
+        layout.setSpacing(12)
+
         # Header
-        header_frame = QFrame()
-        header_layout = QHBoxLayout()
-        header_frame.setLayout(header_layout)
-        
-        connection_info = QLabel(f"Connected to {self.host}:{self.port} via {self.protocol}")
-        connection_info.setStyleSheet("color: #999; font-size: 12px;")
-        header_layout.addWidget(connection_info)
-        
-        header_layout.addStretch()
-        
-        self.disconnect_button = QPushButton("Disconnect")
-        self.disconnect_button.setProperty("class", "disconnect-button")
-        self.disconnect_button.clicked.connect(self.disconnect)
-        header_layout.addWidget(self.disconnect_button)
-        
-        layout.addWidget(header_frame)
-        
-        # Chat display area
+        header = QHBoxLayout()
+        info = QLabel(f"Connected to {self.host}:{self.port} ({self.protocol})")
+        info.setObjectName("topInfo")
+        header.addWidget(info)
+        header.addStretch()
+
+        self.disconnect_btn = QPushButton("Disconnect")
+        self.disconnect_btn.setProperty("class", "disconnect")
+        self.disconnect_btn.clicked.connect(self.disconnect)
+        header.addWidget(self.disconnect_btn)
+
+        layout.addLayout(header)
+
+        # Chat feed
         self.chat_display = QTextEdit()
         self.chat_display.setObjectName("chatDisplay")
         self.chat_display.setReadOnly(True)
         self.chat_display.setFont(QFont("Consolas", 11))
         layout.addWidget(self.chat_display)
-        
-        # Message input area
-        input_frame = QFrame()
-        input_layout = QHBoxLayout()
-        input_frame.setLayout(input_layout)
-        
-        self.message_input = QTextEdit()
+
+        # Bottom input
+        bottom = QHBoxLayout()
+        bottom.setContentsMargins(0, 0, 0, 0)
+        bottom.setSpacing(8)
+
+        self.message_input = MessageInput()
+        self.message_input.enter_pressed.connect(self._send_msg)
+        self.message_input.setMinimumHeight(32)
         self.message_input.setMaximumHeight(80)
-        self.message_input.setPlaceholderText("Type your message here... (Press Ctrl+Enter to send)")
-        self.message_input.textChanged.connect(self.on_text_changed)
-        input_layout.addWidget(self.message_input)
-        
-        self.send_button = QPushButton("Send")
-        self.send_button.setMinimumHeight(80)
-        self.send_button.setEnabled(False)
-        self.send_button.clicked.connect(self.send_message)
-        input_layout.addWidget(self.send_button)
-        
-        layout.addWidget(input_frame)
-        
-        # Status bar
-        self.status_bar = QStatusBar()
-        self.setStatusBar(self.status_bar)
-        self.update_status("Connected", True)
-    
-    def on_text_changed(self):
-        """Enable/disable send button based on input"""
-        has_text = bool(self.message_input.toPlainText().strip())
-        self.send_button.setEnabled(has_text)
-    
-    def send_message(self):
-        """Send message to server"""
-        message = self.message_input.toPlainText().strip()
-        if message:
-            self.message_sent.emit(message)
-            self.message_input.clear()
-            self.send_button.setEnabled(False)
-    
-    def keyPressEvent(self, event):
-        """Handle key press events"""
-        if event.key() == Qt.Key.Key_Return and event.modifiers() == Qt.KeyboardModifier.ControlModifier:
-            self.send_message()
-            event.accept()
-        else:
-            super().keyPressEvent(event)
-    
-    def add_message(self, message: str, is_own: bool = False, is_system: bool = False):
-        """Add message to chat display with proper formatting"""
-        timestamp = QDateTime.currentDateTime().toString("hh:mm:ss")
-        
-        # Move cursor to end
-        cursor = self.chat_display.textCursor()
-        cursor.movePosition(QTextCursor.MoveOperation.End)
-        
-        # Prepare HTML based on message type
+        self.message_input.textChanged.connect(
+            lambda: self.send_btn.setEnabled(bool(self.message_input.toPlainText().strip()))
+        )
+        bottom.addWidget(self.message_input)
+
+        self.send_btn = QPushButton("Send")
+        self.send_btn.setProperty("class", "accent")
+        self.send_btn.setEnabled(False)
+        self.send_btn.clicked.connect(self._send_msg)
+        bottom.addWidget(self.send_btn)
+
+        layout.addLayout(bottom)
+
+        # Status
+        self.status = QStatusBar()
+        self.setStatusBar(self.status)
+        self.status.showMessage("Connected")
+
+    def apply_styles(self):
+        css = Path(__file__).parent / "styles.css"
+        if css.exists():
+            from PyQt6.QtWidgets import QApplication
+            QApplication.instance().setStyleSheet(css.read_text())
+
+    # ----------------------------
+    # Messaging
+    # ----------------------------
+
+    def update_status(self, message, ok=True):
+        """Compatibility with old code."""
+        icon = "🟣" if ok else "🔴"
+        try:
+            self.status.showMessage(f"{icon} {message}")
+        except:
+            pass
+
+
+    def _send_msg(self):
+        msg = self.message_input.toPlainText().rstrip()
+
+        if not msg:
+            return
+        self.message_input.clear()
+
+        # DO NOT ADD MESSAGE HERE — prevent duplicates
+        self.message_sent.emit(msg)
+
+    def add_message(self, message, is_own=False, is_system=False):
+        ts = QDateTime.currentDateTime().toString("HH:mm")
+
+        # Escape HTML symbols
+        message = message.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+        message = message.replace("\n", "<br>")
+
         if is_system:
-            html = f'''
-            <div class="system-message">
-                {message}
-                <br><span style="color: #666; font-size: 10px;">[{timestamp}]</span>
+            html = f"""
+            <div style="
+                color:#bbaaff;
+                font-style:italic;
+                margin:6px 0;
+            ">
+                [{ts}] {message}
             </div>
-            '''
+            """
         elif is_own:
-            html = f'''
-            <div class="client-message">
-                <div style="font-weight: bold; color: #E0E0E0;">You</div>
-                <div style="margin: 4px 0;">{message}</div>
-                <div style="color: #666; font-size: 10px; text-align: right;">[{timestamp}]</div>
+            # RIGHT aligned
+            html = f"""
+            <div style="
+                text-align:right;
+                margin:8px 0;
+                padding:6px 10px;
+                background:#35363b;
+                border-radius:6px;
+                display:inline-block;
+                float:right;
+                max-width:70%;
+                clear:both;
+            ">
+                <span style="color:#ffffff;">[{ts}]</span>
+                <span style="color:#d4c5ff;">You:</span>
+                <span style="color:#ffffff;"> {message}</span>
             </div>
-            '''
+            <div style="clear:both;"></div>
+            """
         else:
-            # Server or other user message
-            if ":" in message:
-                parts = message.split(":", 1)
-                sender = parts[0].strip()
-                content = parts[1].strip()
-                html = f'''
-                <div class="server-message">
-                    <div style="font-weight: bold; color: #E0E0E0;">{sender}</div>
-                    <div style="margin: 4px 0;">{content}</div>
-                    <div style="color: #666; font-size: 10px;">[{timestamp}]</div>
-                </div>
-                '''
-            else:
-                html = f'''
-                <div class="server-message">
-                    <div style="margin: 4px 0;">{message}</div>
-                    <div style="color: #666; font-size: 10px;">[{timestamp}]</div>
-                </div>
-                '''
-        
-        # Insert HTML
+            # LEFT aligned
+            html = f"""
+            <div style="
+                text-align:left;
+                margin:8px 0;
+                padding:6px 10px;
+                background:#2e3035;
+                border-radius:6px;
+                display:inline-block;
+                float:left;
+                max-width:70%;
+                clear:both;
+            ">
+                <span style="color:#ffffff;">[{ts}]</span>
+                <span style="color:#c6d4ff;">Server:</span>
+                <span style="color:#ffffff;"> {message}</span>
+            </div>
+            <div style="clear:both;"></div>
+            """
+
         self.chat_display.append(html)
-        
-        # Scroll to bottom
-        scrollbar = self.chat_display.verticalScrollBar()
-        scrollbar.setValue(scrollbar.maximum())
-    
-    def update_status(self, message: str, is_connected: bool = None):
-        """Update status bar message"""
-        if is_connected is not None:
-            status = "🟢 Connected" if is_connected else "🔴 Disconnected"
-            self.status_bar.showMessage(f"{status} | {message}")
-        else:
-            self.status_bar.showMessage(message)
-    
+        self.chat_display.moveCursor(QTextCursor.MoveOperation.End)
+
+
+
+
+    # ----------------------------
     def disconnect(self):
-        """Handle disconnect"""
         self.disconnected.emit()
         self.close()
-    
-    def closeEvent(self, event):
-        """Handle window close event"""
-        self.disconnected.emit()
-        event.accept()
