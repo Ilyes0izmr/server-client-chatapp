@@ -1,145 +1,92 @@
-from PyQt6.QtWidgets import (QWidget, QHBoxLayout, QPushButton, 
-                            QLabel, QFrame, QVBoxLayout)  # ADD QVBoxLayout
-from PyQt6.QtCore import pyqtSignal, Qt
-from server.core.server import TCPServer
+"""
+Top navigation bar with server controls and status.
+"""
 
-class Navbar(QWidget):
-    start_signal = pyqtSignal()
-    stop_signal = pyqtSignal()
-    broadcast_signal = pyqtSignal(str)
+from PyQt6.QtWidgets import (QWidget, QHBoxLayout, QLabel, QPushButton, 
+                           QVBoxLayout, QFrame)
+from PyQt6.QtCore import Qt, pyqtSignal
+from .styles import Styles
+
+
+class NavBar(QWidget):
+    """Top navigation bar with server status and controls."""
     
-    def __init__(self, server: TCPServer):
+    def __init__(self):
         super().__init__()
-        self.server = server
-        self.setup_ui()
-    
-    def setup_ui(self):
-        # Navbar container
-        self.setFixedHeight(60)
-        self.setStyleSheet("""
-            QWidget {
-                background-color: #1a1a1a;
-                border-bottom: 2px solid #333333;
-            }
-        """)
+        self.is_udp_running = False
+        self.init_ui()
         
-        layout = QHBoxLayout(self)
-        layout.setContentsMargins(20, 10, 20, 10)
-        layout.setSpacing(15)
+    def init_ui(self):
+        """Initialize the navigation bar UI."""
+        layout = QHBoxLayout()
+        layout.setContentsMargins(20, 12, 20, 12)
+        layout.setSpacing(16)
         
-        # Logo/Title
-        title = QLabel("💬 CHAT SERVER")
-        title.setStyleSheet("""
-            QLabel {
-                color: #ffffff;
-                font-size: 18px;
+        # App logo/title
+        title_label = QLabel("CHATSERV - UDP")
+        title_label.setStyleSheet(f"""
+            QLabel {{
+                color: {Styles.TEXT_PRIMARY};
+                font-size: 20px;
                 font-weight: bold;
-                font-family: "Segoe UI", Arial, sans-serif;
-            }
+                font-family: "Monospace", "Courier New";
+            }}
         """)
-        title.setFixedWidth(150)
-        layout.addWidget(title)
         
-        # Server Control Section
-        control_frame = QFrame()
-        control_frame.setStyleSheet("QFrame { background-color: transparent; }")
-        control_layout = QHBoxLayout(control_frame)
-        control_layout.setSpacing(10)
-        control_layout.setContentsMargins(0, 0, 0, 0)
-        
-        # Start Button
-        self.start_btn = QPushButton("🚀 START SERVER")
-        self.start_btn.setFixedSize(140, 35)
-        self.start_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #00b894;
-                color: #ffffff;
-                border: none;
-                border-radius: 6px;
+        # Status indicator
+        self.status_indicator = QLabel("●")
+        self.status_indicator.setStyleSheet(f"""
+            QLabel {{
+                color: {Styles.ACCENT_RED};
+                font-size: 16px;
                 font-weight: bold;
-                font-size: 12px;
-                font-family: "Segoe UI", Arial, sans-serif;
-            }
-            QPushButton:hover {
-                background-color: #00a085;
-            }
-            QPushButton:disabled {
-                background-color: #2d3436;
-                color: #636e72;
-            }
+            }}
         """)
-        self.start_btn.clicked.connect(self.start_signal.emit)
-        control_layout.addWidget(self.start_btn)
+        self.status_label = QLabel("Stopped")
+        self.status_label.setStyleSheet(f"color: {Styles.TEXT_SECONDARY};")
         
-        # Stop Button
-        self.stop_btn = QPushButton("🛑 STOP SERVER")
-        self.stop_btn.setFixedSize(140, 35)
-        self.stop_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #e17055;
-                color: #ffffff;
-                border: none;
-                border-radius: 6px;
-                font-weight: bold;
-                font-size: 12px;
-                font-family: "Segoe UI", Arial, sans-serif;
-            }
-            QPushButton:hover {
-                background-color: #d63031;
-            }
-            QPushButton:disabled {
-                background-color: #2d3436;
-                color: #636e72;
-            }
-        """)
-        self.stop_btn.setEnabled(False)
-        self.stop_btn.clicked.connect(self.stop_signal.emit)
-        control_layout.addWidget(self.stop_btn)
-        
-        layout.addWidget(control_frame)
-        
-        # Status Section
-        status_frame = QFrame()
-        status_frame.setStyleSheet("QFrame { background-color: transparent; }")
-        status_layout = QVBoxLayout(status_frame)
-        status_layout.setSpacing(2)
-        status_layout.setContentsMargins(0, 0, 0, 0)
-        
-        self.status_label = QLabel("🔴 SERVER OFFLINE")
-        self.status_label.setStyleSheet("""
-            QLabel {
-                color: #e17055;
-                font-weight: bold;
-                font-size: 12px;
-                font-family: "Segoe UI", Arial, sans-serif;
-            }
-        """)
-        
-        self.clients_label = QLabel("No clients connected")
-        self.clients_label.setStyleSheet("""
-            QLabel {
-                color: #b2bec3;
-                font-size: 11px;
-                font-family: "Segoe UI", Arial, sans-serif;
-            }
-        """)
-        
+        status_layout = QHBoxLayout()
+        status_layout.addWidget(self.status_indicator)
         status_layout.addWidget(self.status_label)
-        status_layout.addWidget(self.clients_label)
-        layout.addWidget(status_frame)
+        status_layout.setSpacing(8)
         
+        status_widget = QWidget()
+        status_widget.setLayout(status_layout)
+        
+        # Spacer
+        layout.addWidget(title_label)
         layout.addStretch()
+        layout.addWidget(status_widget)
+        layout.addStretch()
+        
+        self.setLayout(layout)
+        self.setFixedHeight(60)
+        self.setStyleSheet(f"""
+            QWidget {{
+                background-color: {Styles.BACKGROUND_SECONDARY};
+                border-bottom: 1px solid {Styles.BORDER_COLOR};
+            }}
+        """)
     
-    def update_status(self, is_running: bool, port: int = 5000, client_count: int = 0):
-        if is_running:
-            self.start_btn.setEnabled(False)
-            self.stop_btn.setEnabled(True)
-            self.status_label.setText(f"🟢 SERVER RUNNING • PORT {port}")
-            self.status_label.setStyleSheet("color: #00b894; font-weight: bold; font-size: 12px;")
-            self.clients_label.setText(f"📊 {client_count} client(s) connected")
+    def update_server_status(self, udp_running: bool):
+        """Update server status display."""
+        self.is_udp_running = udp_running
+        
+        if udp_running:
+            self.status_indicator.setStyleSheet(f"""
+                QLabel {{
+                    color: {Styles.ACCENT_GREEN};
+                    font-size: 16px;
+                    font-weight: bold;
+                }}
+            """)
+            self.status_label.setText("Running (UDP)")
         else:
-            self.start_btn.setEnabled(True)
-            self.stop_btn.setEnabled(False)
-            self.status_label.setText("🔴 SERVER OFFLINE")
-            self.status_label.setStyleSheet("color: #e17055; font-weight: bold; font-size: 12px;")
-            self.clients_label.setText("No clients connected")
+            self.status_indicator.setStyleSheet(f"""
+                QLabel {{
+                    color: {Styles.ACCENT_RED};
+                    font-size: 16px;
+                    font-weight: bold;
+                }}
+            """)
+            self.status_label.setText("Stopped")
