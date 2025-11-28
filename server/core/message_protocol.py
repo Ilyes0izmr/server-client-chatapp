@@ -15,38 +15,63 @@ class MessageProtocol:
     """Protocol for encoding and decoding chat messages."""
     
     @staticmethod
-    def encode_message(message_type: MessageType, content: str, username: str = "", timestamp: Optional[float] = None) -> str:
-        """
-        Encode a message into the protocol format.
-        """
+    def encode_message(message_type: MessageType, content: str, username: str) -> str:
+        """Encode a message into JSON string format"""
+        import json
+        import time
+        
         message_data = {
-            'type': message_type.value,
-            'content': content,
-            'username': username,
-            'timestamp': timestamp if timestamp is not None else time.time(),
-            'version': '1.0'
+            "type": message_type.name.lower(),  # "message" or "status"
+            "content": content,
+            "username": username,
+            "timestamp": time.time(),
+            "version": "1.0"
         }
         
         return json.dumps(message_data)
-    
+        
     @staticmethod
-    def decode_message(message_str: str) -> Optional[Dict[str, Any]]:
-        """
-        Decode a message from the protocol format.
-        """
+    def decode_message(message_str: str):
+        """Decode a message string into (message_type, content, sender)"""
         try:
-            message_data = json.loads(message_str)
+            print(f"🔍 MESSAGE PROTOCOL DEBUG: Decoding message: {message_str}")
             
-            # validate required fields
-            if not all(key in message_data for key in ['type', 'content', 'timestamp']):
-                return None
+            # Check if the message starts with unexpected characters
+            if not message_str.startswith('{'):
+                # Try to find the JSON part
+                start_idx = message_str.find('{')
+                if start_idx != -1:
+                    message_str = message_str[start_idx:]
+                    print(f"🔍 MESSAGE PROTOCOL DEBUG: Fixed message string: {message_str}")
+                else:
+                    print(f"❌ MESSAGE PROTOCOL DEBUG: No JSON found in message: {message_str}")
+                    return None, "", ""
             
-            # validate message type
-            valid_types = [msg_type.value for msg_type in MessageType]
-            if message_data['type'] not in valid_types:
-                return None
+            # Parse JSON
+            import json
+            data = json.loads(message_str)
             
-            return message_data
+            # Extract fields with defaults
+            message_type_str = data.get('type', '')
+            content = data.get('content', '')
+            sender = data.get('username', '')
             
-        except (json.JSONDecodeError, ValueError):
-            return None
+            # Convert string type to MessageType enum
+            if message_type_str == 'connect':
+                message_type = MessageType.STATUS
+            elif message_type_str == 'message':
+                message_type = MessageType.MESSAGE
+            elif message_type_str == 'disconnect':
+                message_type = MessageType.STATUS
+            else:
+                message_type = MessageType.STATUS  # Default to STATUS
+            
+            print(f"🔍 MESSAGE PROTOCOL DEBUG: Decoded - type: {message_type}, content: '{content}', sender: '{sender}'")
+            return message_type, content, sender
+            
+        except json.JSONDecodeError as e:
+            print(f"❌ MESSAGE PROTOCOL DEBUG: JSON decode error: {e}")
+            return None, "", ""
+        except Exception as e:
+            print(f"❌ MESSAGE PROTOCOL DEBUG: Error decoding message: {e}")
+            return None, "", ""
