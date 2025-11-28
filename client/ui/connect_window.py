@@ -1,327 +1,214 @@
-from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, 
-                            QLineEdit, QPushButton, QGroupBox, QMessageBox,
-                            QRadioButton, QButtonGroup, QFrame)
+from PyQt6.QtWidgets import (
+    QWidget, QVBoxLayout, QHBoxLayout, QLabel,
+    QLineEdit, QPushButton, QGroupBox, QMessageBox,
+    QRadioButton, QButtonGroup
+)
 from PyQt6.QtCore import pyqtSignal, Qt
-from PyQt6.QtGui import QFont, QIntValidator
-import logging
+from PyQt6.QtGui import QIntValidator
+from pathlib import Path
+
 
 class ConnectWindow(QWidget):
-    """Window for connecting to chat server with protocol selection"""
-    
-    connected = pyqtSignal(str, int, str, str)  # host, port, username, protocol
-    
+
+    connected = pyqtSignal(str, int, str, str)
+
     def __init__(self):
         super().__init__()
-        self.logger = logging.getLogger(__name__)
         self.init_ui()
-    
+        self.apply_styles()
+        self.connect_btn.setProperty("class", "accent")
+
+
     def init_ui(self):
-        """Initialize the UI"""
-        self.setWindowTitle("Chat Client - Connect to Server")
-        self.setFixedSize(500, 600)  # Made it bigger to fit everything
-        
-        main_layout = QVBoxLayout()
-        main_layout.setSpacing(15)
-        main_layout.setContentsMargins(20, 20, 20, 20)
-        
+        self.setWindowTitle("Connect")
+        self.setFixedSize(500, 520)
+
+        main = QVBoxLayout(self)
+        main.setContentsMargins(20, 20, 20, 20)
+        main.setSpacing(16)
+
         # Title
-        title_label = QLabel("CHATCLIENT")
-        title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        title_label.setFont(QFont("Segoe UI", 24, QFont.Weight.Bold))
-        title_label.setStyleSheet("color: #E0E0E0; margin-bottom: 5px;")
-        main_layout.addWidget(title_label)
-        
-        subtitle_label = QLabel("Connect to Chat Server")
-        subtitle_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        subtitle_label.setStyleSheet("color: #999; font-size: 14px; margin-bottom: 20px;")
-        main_layout.addWidget(subtitle_label)
-        
-        # Server settings group - MAKE SURE THIS IS ADDED
-        server_group = QGroupBox("Server Configuration")
-        server_group.setStyleSheet("""
-            QGroupBox {
-                background-color: #1A1A1A;
-                border: 2px solid #333;
-                border-radius: 8px;
-                margin-top: 10px;
-                padding-top: 15px;
-                font-weight: bold;
-                color: #E0E0E0;
-                font-size: 14px;
-            }
-            QGroupBox::title {
-                color: #E0E0E0;
-                subcontrol-origin: margin;
-                left: 10px;
-                padding: 0 8px 0 8px;
-            }
-        """)
-        
-        server_layout = QVBoxLayout()
-        server_layout.setSpacing(15)
-        server_layout.setContentsMargins(15, 15, 15, 15)
-        
-        # Protocol selection
-        protocol_label = QLabel("Select Protocol:")
-        protocol_label.setStyleSheet("font-weight: bold; color: #E0E0E0; font-size: 14px;")
-        server_layout.addWidget(protocol_label)
-        
-        # Radio buttons container
-        radio_container = QWidget()
-        radio_layout = QHBoxLayout(radio_container)
-        radio_layout.setContentsMargins(0, 0, 0, 0)
-        
-        self.protocol_group = QButtonGroup(self)
-        
-        self.tcp_radio = QRadioButton("TCP (Reliable)")
-        self.udp_radio = QRadioButton("UDP (Fast)")
-        self.tcp_radio.setChecked(True)
-        
-        # Style radio buttons
-        radio_style = """
-            QRadioButton {
-                color: #E0E0E0;
-                font-size: 13px;
-                padding: 8px;
-                spacing: 8px;
-            }
-            QRadioButton::indicator {
-                width: 16px;
-                height: 16px;
-                border-radius: 8px;
-                border: 2px solid #666;
-            }
-            QRadioButton::indicator:checked {
-                background-color: #E0E0E0;
-                border: 2px solid #E0E0E0;
-            }
-            QRadioButton::indicator:unchecked {
-                background-color: #2D2D2D;
-            }
-        """
-        self.tcp_radio.setStyleSheet(radio_style)
-        self.udp_radio.setStyleSheet(radio_style)
-        
-        self.protocol_group.addButton(self.tcp_radio)
-        self.protocol_group.addButton(self.udp_radio)
-        
-        radio_layout.addWidget(self.tcp_radio)
-        radio_layout.addWidget(self.udp_radio)
-        radio_layout.addStretch()
-        
-        server_layout.addWidget(radio_container)
-        
-        # Server address section
-        server_address_label = QLabel("Server Address:")
-        server_address_label.setStyleSheet("font-weight: bold; color: #E0E0E0; font-size: 14px; margin-top: 10px;")
-        server_layout.addWidget(server_address_label)
-        
-        # Host input
-        host_layout = QHBoxLayout()
-        host_label = QLabel("Host:")
-        host_label.setStyleSheet("color: #E0E0E0; min-width: 60px;")
-        host_layout.addWidget(host_label)
-        
+        title = QLabel("CHATCLIENT")
+        title.setObjectName("titleLabel")
+        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        main.addWidget(title)
+
+        subtitle = QLabel("Connect to Chat Server")
+        subtitle.setObjectName("subtitleLabel")
+        subtitle.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        main.addWidget(subtitle)
+
+        # --- SERVER GROUP ---
+        server_box = QGroupBox("Server Settings")
+        server_layout = QVBoxLayout(server_box)
+        server_layout.setSpacing(12)
+
+        # protocol
+        proto_label = QLabel("Protocol")
+        proto_label.setStyleSheet("font-weight:600;")
+        server_layout.addWidget(proto_label)
+
+        proto_row = QHBoxLayout()
+
+        self.tcp = QRadioButton("TCP")
+        self.tcp.setChecked(True)
+        self.udp = QRadioButton("UDP")
+
+        self.proto_group = QButtonGroup(self)
+        self.proto_group.addButton(self.tcp)
+        self.proto_group.addButton(self.udp)
+
+        proto_row.addWidget(self.tcp)
+        proto_row.addWidget(self.udp)
+        proto_row.addStretch()
+
+        server_layout.addLayout(proto_row)
+
+        # Host row
+        host_row = QHBoxLayout()
+        host_row.addWidget(QLabel("Host:"))
         self.host_input = QLineEdit("localhost")
-        self.host_input.setPlaceholderText("Enter server IP or hostname")
-        self.host_input.setStyleSheet("""
-            QLineEdit {
-                background-color: #2D2D2D;
-                color: #E0E0E0;
-                border: 1px solid #444;
-                border-radius: 4px;
-                padding: 8px;
-                font-size: 14px;
-            }
-            QLineEdit:focus {
-                border: 1px solid #666;
-            }
-        """)
-        host_layout.addWidget(self.host_input)
-        server_layout.addLayout(host_layout)
-        
-        # Port input
-        port_layout = QHBoxLayout()
-        port_label = QLabel("Port:")
-        port_label.setStyleSheet("color: #E0E0E0; min-width: 60px;")
-        port_layout.addWidget(port_label)
-        
+        self.host_input.setPlaceholderText("Server address")
+        self.host_input.setMinimumHeight(38)
+        host_row.addWidget(self.host_input)
+        server_layout.addLayout(host_row)
+
+        # Port row
+        port_row = QHBoxLayout()
+        port_row.addWidget(QLabel("Port:"))
         self.port_input = QLineEdit("5050")
         self.port_input.setPlaceholderText("Server port")
+        self.port_input.setMinimumHeight(38)
         self.port_input.setValidator(QIntValidator(1, 65535))
-        self.port_input.setStyleSheet("""
-            QLineEdit {
-                background-color: #2D2D2D;
-                color: #E0E0E0;
-                border: 1px solid #444;
-                border-radius: 4px;
-                padding: 8px;
-                font-size: 14px;
-            }
-            QLineEdit:focus {
-                border: 1px solid #666;
-            }
-        """)
-        port_layout.addWidget(self.port_input)
-        server_layout.addLayout(port_layout)
-        
-        server_group.setLayout(server_layout)
-        main_layout.addWidget(server_group)
-        
-        # User settings group
-        user_group = QGroupBox("User Configuration")
-        user_group.setStyleSheet("""
-            QGroupBox {
-                background-color: #1A1A1A;
-                border: 2px solid #333;
-                border-radius: 8px;
-                margin-top: 10px;
-                padding-top: 15px;
-                font-weight: bold;
-                color: #E0E0E0;
-                font-size: 14px;
-            }
-            QGroupBox::title {
-                color: #E0E0E0;
-                subcontrol-origin: margin;
-                left: 10px;
-                padding: 0 8px 0 8px;
-            }
-        """)
-        
-        user_layout = QVBoxLayout()
-        user_layout.setSpacing(15)
-        user_layout.setContentsMargins(15, 15, 15, 15)
-        
-        username_layout = QHBoxLayout()
-        username_label = QLabel("Username:")
-        username_label.setStyleSheet("color: #E0E0E0; min-width: 80px;")
-        username_layout.addWidget(username_label)
-        
+        port_row.addWidget(self.port_input)
+        server_layout.addLayout(port_row)
+
+        main.addWidget(server_box)
+
+        # --- USER GROUP ---
+        user_box = QGroupBox("User Settings")
+        user_layout = QVBoxLayout(user_box)
+        user_layout.setSpacing(12)
+
+        user_row = QHBoxLayout()
+        user_row.addWidget(QLabel("Username:"))
         self.username_input = QLineEdit()
-        self.username_input.setPlaceholderText("Enter your display name")
-        self.username_input.setStyleSheet("""
-            QLineEdit {
-                background-color: #2D2D2D;
-                color: #E0E0E0;
-                border: 1px solid #444;
-                border-radius: 4px;
-                padding: 8px;
-                font-size: 14px;
-            }
-            QLineEdit:focus {
-                border: 1px solid #666;
-            }
-        """)
-        username_layout.addWidget(self.username_input)
-        user_layout.addLayout(username_layout)
-        
-        user_group.setLayout(user_layout)
-        main_layout.addWidget(user_group)
-        
-        # Connect button
-        self.connect_button = QPushButton("Connect to Server")
-        self.connect_button.setStyleSheet("""
-            QPushButton {
-                background-color: #2D5A2D;
-                color: #E0E0E0;
-                border: 2px solid #3D6A3D;
-                border-radius: 6px;
-                padding: 12px;
-                font-weight: bold;
-                font-size: 14px;
-                margin-top: 10px;
-            }
-            QPushButton:hover {
-                background-color: #357535;
-                border: 2px solid #457A45;
-            }
-            QPushButton:pressed {
-                background-color: #245224;
-            }
-            QPushButton:disabled {
-                background-color: #1A2A1A;
-                color: #666;
-                border: 2px solid #2D3A2D;
-            }
-        """)
-        self.connect_button.clicked.connect(self.connect_to_server)
-        self.connect_button.setMinimumHeight(45)
-        main_layout.addWidget(self.connect_button)
-        
-        # Status label
-        self.status_label = QLabel("Ready to connect")
-        self.status_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.status_label.setStyleSheet("color: #999; font-size: 12px; margin-top: 10px;")
-        main_layout.addWidget(self.status_label)
-        
-        main_layout.addStretch()
-        self.setLayout(main_layout)
-    
-    def connect_to_server(self):
-        """Attempt to connect to server"""
-        host = self.host_input.text().strip()
-        port_text = self.port_input.text().strip()
-        username = self.username_input.text().strip()
-        protocol = "TCP" if self.tcp_radio.isChecked() else "UDP"
-        
-        print(f"DEBUG: Protocol selected: {protocol}")  # Debug line
-        
-        # Validation
-        if not host:
-            self.show_error("Please enter a server host address")
-            return
-        
-        if not port_text:
-            self.show_error("Please enter a server port number")
-            return
-        
-        if not username:
-            self.show_error("Please enter a username")
-            return
-        
-        try:
-            port = int(port_text)
-            if port < 1 or port > 65535:
-                raise ValueError("Port out of range")
-        except ValueError:
-            self.show_error("Please enter a valid port number (1-65535)")
-            return
-        
-        # Update UI
-        self.set_connecting(True, f"Connecting via {protocol}...")
-        
-        # Emit connection signal
-        self.connected.emit(host, port, username, protocol)
-    
-    def show_error(self, message):
-        """Show error message"""
-        QMessageBox.critical(self, "Connection Error", message)
-        self.set_connecting(False, "Connection failed")
-    
-    def show_success(self, message):
-        """Show success message"""
-        self.set_connecting(False, message)
-    
-    def set_connecting(self, connecting, status_message=""):
-        """Update UI during connection attempt"""
-        self.connect_button.setEnabled(not connecting)
+        self.username_input.setPlaceholderText("Display name")
+        self.username_input.setMinimumHeight(38)
+        user_row.addWidget(self.username_input)
+        user_layout.addLayout(user_row)
+
+        main.addWidget(user_box)
+
+        # connect button
+        self.connect_btn = QPushButton("Connect")
+        self.connect_btn.setProperty("class", "accent")
+        self.connect_btn.setMinimumHeight(42)
+        self.connect_btn.clicked.connect(self.connect_to_server)
+        main.addWidget(self.connect_btn)
+
+        # status text
+        self.status = QLabel("Ready")
+        self.status.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.status.setObjectName("statusText")
+        main.addWidget(self.status)
+
+        main.addStretch()
+
+    # -----------------------------------------------------------
+
+    def apply_styles(self):
+        css = Path(__file__).parent / "styles.css"
+        if css.exists():
+            from PyQt6.QtWidgets import QApplication
+            QApplication.instance().setStyleSheet(css.read_text())
+
+    # -----------------------------------------------------------
+
+        # -----------------------------------------------------------
+    # Compatibility method – needed because main.py still calls it
+    # -----------------------------------------------------------
+    def set_connecting(self, connecting: bool, status_message: str = ""):
+        """Keep compatibility with the old logic."""
+        self.connect_btn.setEnabled(not connecting)
         self.host_input.setEnabled(not connecting)
         self.port_input.setEnabled(not connecting)
         self.username_input.setEnabled(not connecting)
-        self.tcp_radio.setEnabled(not connecting)
-        self.udp_radio.setEnabled(not connecting)
-        
+        self.tcp.setEnabled(not connecting)
+        self.udp.setEnabled(not connecting)
+
         if connecting:
-            self.connect_button.setText("Connecting...")
-            self.status_label.setText(status_message)
-            self.status_label.setStyleSheet("color: #E0E0E0; font-size: 12px;")
+            self.connect_btn.setText("Connecting…")
+            self.status.setText(status_message or "Connecting…")
         else:
-            self.connect_button.setText("Connect to Server")
-            self.status_label.setText(status_message)
-            self.status_label.setStyleSheet("color: #999; font-size: 12px;")
-    
+            self.connect_btn.setText("Connect")
+            self.status.setText(status_message or "Ready")
+
+
+    def connect_to_server(self):
+
+        host = self.host_input.text().strip()
+        port = self.port_input.text().strip()
+        user = self.username_input.text().strip()
+        protocol = "TCP" if self.tcp.isChecked() else "UDP"
+
+        if not host:
+            return self.error("Enter server host")
+        if not port:
+            return self.error("Enter port number")
+        if not user:
+            return self.error("Enter username")
+
+        try:
+            p = int(port)
+            if not (1 <= p <= 65535):
+                raise ValueError
+        except:
+            return self.error("Invalid port (1–65535)")
+
+        self.status.setText(f"Connecting via {protocol}…")
+        self.connected.emit(host, p, user, protocol)
+
+    # -----------------------------------------------------------
+
+    def show_success(self, message):
+        """Compatibility with old main.py"""
+        self.status.setText(message)
+
+    def set_connecting(self, connecting: bool, status_message: str = ""):
+        """Compatibility with old main.py."""
+        self.connect_btn.setEnabled(not connecting)
+        self.host_input.setEnabled(not connecting)
+        self.port_input.setEnabled(not connecting)
+        self.username_input.setEnabled(not connecting)
+        self.tcp.setEnabled(not connecting)
+        self.udp.setEnabled(not connecting)
+
+        if connecting:
+            self.connect_btn.setText("Connecting…")
+            self.status.setText(status_message or "Connecting…")
+        else:
+            self.connect_btn.setText("Connect")
+            self.status.setText(status_message or "Ready")
+
     def reset(self):
-        """Reset the connection window"""
-        self.set_connecting(False, "Ready to connect")
-        self.host_input.setFocus()
+        """Restore input fields after disconnect."""
+        self.connect_btn.setEnabled(True)
+        self.connect_btn.setText("Connect")
+
+        self.host_input.setEnabled(True)
+        self.port_input.setEnabled(True)
+        self.username_input.setEnabled(True)
+        self.tcp.setEnabled(True)
+        self.udp.setEnabled(True)
+
+        self.status.setText("Ready")
+
+    def disconnect(self):
+        self.disconnected.emit()
+        self.close()
+
+
+    def error(self, msg):
+        QMessageBox.critical(self, "Error", msg)
+        self.status.setText("Error")
