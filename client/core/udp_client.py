@@ -18,24 +18,68 @@ class UDPClient(ClientBase):
         self.username = None
         self.sequence_number = 0  # For message ordering
         self.pending_acknowledgements = {}  # For reliable UDP
+        self.connection_verified = False  # Track if server is reachable
     
     def connect(self) -> bool:
-        """Setup UDP socket (UDP is connectionless)"""
+        """Setup UDP socket and verify server is reachable"""
         try:
             self.socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-            self.socket.settimeout(1.0)  # Shorter timeout for UDP
+            self.socket.settimeout(1.5)  # Longer timeout for connection verification
             self.is_connected = True
-            self.logger.info(f"UDP client ready to send to {self.host}:{self.port}")
-            return True
+            
+            # Try to verify server is reachable by sending a test packet
+            if self._verify_server_connection():
+                self.socket.settimeout(1.0)  # Reset to normal timeout
+                self.connection_verified = True
+                self.logger.info(f"UDP client connected to {self.host}:{self.port}")
+                return True
+            else:
+                self.logger.error(f"UDP server not reachable at {self.host}:{self.port}")
+                self.is_connected = False
+                return False
+                
         except Exception as e:
             self.logger.error(f"Failed to setup UDP client: {e}")
             self.is_connected = False
             return False
     
+    def _verify_server_connection(self) -> bool:
+        """Verify that the server is reachable by sending a test message"""
+        try:
+            # Create a test connection message
+            test_message = ChatMessage.create_connect_message("test_connection")
+            message_data = test_message.to_json().encode(self.encoding)
+            
+            # Send test message
+            self.socket.sendto(message_data, self.server_address)
+            self.logger.debug(f"Sent connection test to {self.server_address}")
+            
+            # Wait for any response (even if it's not the expected one)
+            start_time = time.time()
+            while time.time() - start_time < 3.0:  # 3 second timeout
+                try:
+                    data, addr = self.socket.recvfrom(self.buffer_size)
+                    if data:
+                        # If we get any response, server is reachable
+                        self.logger.debug(f"Server response received from {addr}")
+                        return True
+                except socket.timeout:
+                    continue
+                except BlockingIOError:
+                    continue
+            
+            # No response received within timeout
+            self.logger.warning("No response from server during connection test")
+            return False
+            
+        except Exception as e:
+            self.logger.error(f"Error during connection verification: {e}")
+            return False
+    
     def send_message(self, message: str, username: str = None) -> bool:
         """Send message to server via UDP"""
-        if not self.is_connected or not self.socket:
-            self.logger.error("UDP client not initialized")
+        if not self.is_connected or not self.socket or not self.connection_verified:
+            self.logger.error("UDP client not properly connected")
             return False
         
         try:
@@ -43,16 +87,18 @@ class UDPClient(ClientBase):
             message_data = chat_message.to_json().encode(self.encoding)
             
             # For UDP, we just send the datagram
-            self.socket.sendto(message_data, self.server_address)
-            self.logger.debug(f"UDP message sent: {message}")
+            bytes_sent = self.socket.sendto(message_data, self.server_address)
+            self.logger.debug(f"UDP message sent: {message} ({bytes_sent} bytes)")
             return True
         except Exception as e:
             self.logger.error(f"Failed to send UDP message: {e}")
+            self.is_connected = False
+            self.connection_verified = False
             return False
     
     def send_connect_message(self, username: str) -> bool:
         """Send connection message to server via UDP"""
-        if not self.is_connected or not self.socket:
+        if not self.is_connected or not self.socket or not self.connection_verified:
             return False
         
         try:
@@ -69,7 +115,7 @@ class UDPClient(ClientBase):
     
     def send_disconnect_message(self) -> bool:
         """Send disconnect message to server via UDP"""
-        if not self.is_connected or not self.socket:
+        if not self.is_connected or not self.socket or not self.connection_verified:
             return False
         
         try:
@@ -85,7 +131,7 @@ class UDPClient(ClientBase):
     
     def receive_message(self) -> Optional[ChatMessage]:
         """Receive a single message from server via UDP"""
-        if not self.is_connected or not self.socket:
+        if not self.is_connected or not self.socket or not self.connection_verified:
             return None
         
         try:
@@ -104,11 +150,17 @@ class UDPClient(ClientBase):
             pass
         except Exception as e:
             self.logger.error(f"Error receiving UDP message: {e}")
+            self.is_connected = False
+            self.connection_verified = False
         
         return None
     
     def start_listening(self, callback: Callable[[ChatMessage], None]):
         """Start background thread to listen for UDP messages"""
+        if not self.connection_verified:
+            self.logger.warning("Cannot start listening - server connection not verified")
+            return
+            
         self.receive_callback = callback
         self.should_listen = True
         self.receive_thread = threading.Thread(target=self._listen_loop, daemon=True)
@@ -116,7 +168,7 @@ class UDPClient(ClientBase):
     
     def _listen_loop(self):
         """Background thread loop for receiving UDP messages"""
-        while self.should_listen and self.is_connected:
+        while self.should_listen and self.is_connected and self.connection_verified:
             try:
                 message = self.receive_message()
                 if message and self.receive_callback:
@@ -135,11 +187,12 @@ class UDPClient(ClientBase):
     
     def disconnect(self):
         """Disconnect UDP client"""
-        if self.is_connected:
+        if self.is_connected and self.connection_verified:
             self.send_disconnect_message()
         
         self.stop_listening()
         self.is_connected = False
+        self.connection_verified = False
         if self.socket:
             try:
                 self.socket.close()
