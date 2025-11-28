@@ -4,8 +4,11 @@ channels:
   - defaults
 
 dependencies:
-  - python=3.9
+  - python=3.13.9
+<<<<<<< HEAD
   - pyqt
+=======
+>>>>>>> ad2338a3d5a7dcfa788f49b356f57ae05b953964
   - numpy
   - pandas
   - matplotlib
@@ -18,3 +21,5 @@ dependencies:
   - black
   - flake8
   - pip
+  - pip:
+      - PyQt6==6.6.1
