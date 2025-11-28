@@ -1,8 +1,3 @@
-#!/usr/bin/env python3
-"""
-Server application entry point - launches GUI
-"""
-
 import sys
 import os
 
@@ -10,7 +5,7 @@ import os
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, project_root)
 
-from server.ui.main_window import MainWindow
+from server.ui.main_window import ServerMainWindow
 from PyQt6.QtWidgets import QApplication
 from PyQt6.QtGui import QFont
 
@@ -22,7 +17,7 @@ def main():
     font = QFont("Segoe UI", 10)
     app.setFont(font)
     
-    window = MainWindow()
+    window = ServerMainWindow()
     window.show()
     
     sys.exit(app.exec())
