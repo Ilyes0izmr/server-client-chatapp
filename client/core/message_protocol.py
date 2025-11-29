@@ -11,6 +11,7 @@ class MessageType(Enum):
     MESSAGE = "message"
     STATUS = "status"
     ERROR = "error"
+    TEST = "test"
 
 @dataclass
 class ChatMessage:

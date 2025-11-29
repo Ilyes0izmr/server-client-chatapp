@@ -10,6 +10,7 @@ class MessageType(Enum):
     MESSAGE = "message"
     STATUS = "status"
     ERROR = "error"
+    TEST = "test"
 
 class MessageProtocol:
     """Protocol for encoding and decoding chat messages."""
@@ -63,6 +64,8 @@ class MessageProtocol:
                 message_type = MessageType.MESSAGE
             elif message_type_str == 'disconnect':
                 message_type = MessageType.DISCONNECT
+            elif message_type_str == 'test':
+                message_type = MessageType.TEST
             else:
                 message_type = MessageType.STATUS  # Default to STATUS
             

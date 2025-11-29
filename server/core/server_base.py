@@ -11,7 +11,7 @@ class ServerProtocol(Enum):
 class ServerBase(abc.ABC):
     """abstract class for the servers tcp/udp """
 
-    def __init__(self, host , port: int = 5050):
+    def __init__(self, host: str = '0.0.0.0', port: int = 5050):
         self.host = host                            
         self.port = port 
         self.is_running = False 

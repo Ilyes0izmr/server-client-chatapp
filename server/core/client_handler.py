@@ -4,6 +4,7 @@ import json
 from datetime import datetime
 from typing import Callable, Dict
 from server.core.message_protocol import MessageProtocol, MessageType
+import time
 
 class ClientHandler:
     """Handles individual TCP client connections using length-prefixed JSON protocol"""
@@ -129,9 +130,15 @@ class ClientHandler:
             if message_type == MessageType.MESSAGE:
                 if self.message_callback:
                     self.message_callback(client_info, content)
-                    print(f"📨 Message forwarded to server: '{content}'")
+                    self.message_callback(client_info, content)
                 else:
                     print("❌ No message_callback set in ClientHandler!")
+
+            elif message_type == MessageType.TEST:
+                ##server_recv_time = time.time()
+                ##print(f"📢 TEST: {server_recv_time}")
+                self._send_test_message((""))
+                
 
             elif message_type == MessageType.STATUS:
                 display_msg = f"{sender}: {content}" if sender else content
@@ -178,7 +185,7 @@ class ClientHandler:
             return False
 
         try:
-            # Encode using MessageProtocol (ensures format matches client)
+            
             encoded = MessageProtocol.encode_message(message_type, content, sender)
             data = encoded.encode('utf-8')
             length = len(data)
@@ -186,7 +193,7 @@ class ClientHandler:
             # Send 4-byte length (big-endian) + message
             self.client_socket.sendall(length.to_bytes(4, 'big'))
             self.client_socket.sendall(data)
-            
+            print(f"📤 SENT | {data}")
             print(f"📤 SENT {length}B | {message_type.name}: '{content}' (sender: {sender})")
             return True
 
@@ -202,6 +209,9 @@ class ClientHandler:
     def _send_status_message(self, content: str, sender: str = "System") -> bool:
         """Send a status message (e.g., welcome, system alerts)"""
         return self._send_raw_message(MessageType.STATUS, content, sender)
+
+    def _send_test_message(self, content:str):
+        return self._send_raw_message(MessageType.TEST, content, "server")
 
     def _send_connect_ack(self, username: str) -> bool:
         """Send connection acknowledgment"""

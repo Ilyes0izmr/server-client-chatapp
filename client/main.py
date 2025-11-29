@@ -1,7 +1,6 @@
 import sys
 import os
 import logging
-
 # Fix imports - add the current directory to path
 current_dir = os.path.dirname(os.path.abspath(__file__))
 if current_dir not in sys.path:
@@ -9,7 +8,6 @@ if current_dir not in sys.path:
 
 from PyQt6.QtWidgets import QApplication, QMessageBox
 from PyQt6.QtCore import QTimer
-
 from ui.connect_window import ConnectWindow
 from ui.chat_window import ChatWindow
 from core.tcp_client import TCPClient
@@ -107,6 +105,7 @@ class ChatClient:
             self.client.port, 
             self.protocol
         )
+        self.chat_window.client = self.client
         self.chat_window.message_sent.connect(self.handle_message_sent)
         self.chat_window.disconnected.connect(self.handle_disconnect)  # This should work now
         
