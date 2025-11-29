@@ -1,5 +1,6 @@
 # Chat Application
 PyQt6==6.6.1
+qtawesome
 
 # Data Science & Plotting
 numpy==1.24.3

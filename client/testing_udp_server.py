@@ -18,8 +18,9 @@ class UDPServer:
     Handles multiple clients simultaneously
     """
     
-    def __init__(self, host='localhost', port=5051, buffer_size=4096):
-        self.host = host
+    def __init__(self, host='192.168.1.33', port=5051, buffer_size=4096):
+        self.host = '192.168.1.33'
+        print(f"UDP Server will run on {self.host}:{port}")
         self.port = port
         self.buffer_size = buffer_size
         self.socket = None
