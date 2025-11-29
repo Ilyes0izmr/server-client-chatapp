@@ -37,8 +37,8 @@ class UDPServer(ServerBase):
         self.receive_thread.start()
         
         # Start client cleanup thread
-        self.cleanup_thread = threading.Thread(target=self._cleanup_loop, daemon=True)
-        self.cleanup_thread.start()
+        #self.cleanup_thread = threading.Thread(target=self._cleanup_loop, daemon=True)
+        #self.cleanup_thread.start()
         
         self._notify_status(f"UDP server started on {self.host}:{self.port}", False)
         return True
@@ -245,7 +245,7 @@ class UDPServer(ServerBase):
                 
                 with self._lock:
                     for client_addr, last_seen in self.client_last_seen.items():
-                        if current_time - last_seen > 30:  # 30 second timeout
+                        if current_time - last_seen > 60:  # 30 second timeout
                             disconnected_clients.append(client_addr)
                 
                 for client_addr in disconnected_clients:

@@ -8,8 +8,8 @@ from server.core.message_protocol import MessageProtocol, MessageType
 class TCPServer(ServerBase):
     """TCP server implementation"""
 
-    def __init__(self, host: str = 'localhost', port: int = 5050):
-        super().__init__(host, port)
+    def __init__(self, host: str = '172.90.0.1', port: int = 5050):
+        super().__init__('172.90.0.1', port)
         self.clients: Dict[socket.socket, ClientHandler] = {}
         self.client_connected_callback = None
         self.client_disconnected_callback = None
