@@ -24,7 +24,7 @@ class ServerMainWindow(QMainWindow):
     def setup_ui(self):
         # Main window setup ------------------------------------------------------------
         self.setWindowTitle("ChatServ - Server Control")
-        self.setGeometry(200, 200, 1400, 800)  # Increased width for chat
+        self.setGeometry(200, 200, 940, 540)
         
         # Central widget ------------------------------------------------------------
         central_widget = QWidget()
