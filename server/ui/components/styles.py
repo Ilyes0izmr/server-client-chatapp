@@ -1,83 +1,90 @@
-"""
-CSS styles for the chat application - Black Monochrome Theme
-"""
-
 LEFT_PANEL_STYLES = """
-/* Left Panel Styles */
+/* Left Panel - Black Monochrome + Purple Accent */
 #leftPanel {
-    background-color: #4A148C;  /* Purple background */
-    border-right: 2px solid #333;
+    background-color: #2D1B40;  /* Deep purple (better than #4A148C for contrast) */
+    border-right: 1px solid #443355;
+    color: #E0E0E0;
 }
 
 #logo {
     font-size: 20px;
     font-weight: bold;
-    color: #E0E0E0;
-    padding: 15px;
-    border: 2px solid #E0E0E0;
-    border-radius: 8px;
+    color: #FFFFFF;
+    text-align: center;
+    padding: 12px 0;
     margin-bottom: 10px;
+    letter-spacing: 1px;
 }
 
-/* Separator Styles */
+/* Separator - thin, elegant */
 #separator {
-    background-color: #E0E0E0;
-    height: 2px;
-    margin: 15px 0;
+    background-color: #554466;
+    height: 1px;
+    margin: 10px 15px;
 }
 
-/* Button Styles - NO HOVER EFFECTS */
-#tcpButton {
-    background-color: #2E7D32;  /* Green */
-    color: #E0E0E0;
-    border: 2px solid #1B5E20;
-    border-radius: 8px;
-    padding: 12px;
-    font-weight: bold;
+/* Icon Buttons - Compact, clean, no hover */
+QToolButton {
+    text-align: left;
+    padding: 10px 14px;
+    border-radius: 6px;
     font-size: 14px;
-    min-height: 45px;
+    font-weight: 500;
+    color: #E0E0E0;
+    background: transparent;
+    border: 2px solid transparent;
+    min-height: 40px;
+}
+
+/* No hover effects — as requested */
+QToolButton:hover {
+    background: transparent;
+    border: 2px solid transparent;
+}
+
+/* TCP Button - Green theme */
+#tcpButton {
+    border-color: #2E7D32;
 }
 
 #tcpButton[running="true"] {
-    background-color: #1B5E20;
-    border-color: #E0E0E0;
+    color: #A5D6A7;
+    border-color: #4CAF50;
 }
 
+/* UDP Button - Blue theme */
 #udpButton {
-    background-color: #1565C0;  /* Blue */
-    color: #E0E0E0;
-    border: 2px solid #0D47A1;
-    border-radius: 8px;
-    padding: 12px;
-    font-weight: bold;
-    font-size: 14px;
-    min-height: 45px;
+    border-color: #1565C0;
 }
 
 #udpButton[running="true"] {
-    background-color: #0D47A1;
-    border-color: #E0E0E0;
+    color: #90CAF9;
+    border-color: #42A5F5;
 }
 
+/* Shutdown Button */
 #shutdownButton {
-    background-color: #424242;  /* Gray when disabled */
-    color: #9E9E9E;
+    background: #1E1328;
     border: 2px solid #616161;
-    border-radius: 8px;
-    padding: 12px;
-    font-weight: bold;
-    font-size: 14px;
-    min-height: 45px;
+    color: #9E9E9E;
+    min-height: 44px;
 }
 
 #shutdownButton:enabled {
-    background-color: #C62828;  /* Red when enabled */
-    color: #E0E0E0;
-    border-color: #B71C1C;
+    color: #FF8A80;
+    border-color: #E57373;
+    background: #1E1328;
+}
+
+/* Ensure icon alignment */
+QToolButton::icon {
+    left: 4px;
+    top: 0;
 }
 """
-
-# Export all styles
 STYLES = {
     'left_panel': LEFT_PANEL_STYLES,
 }
+
+# Optional: for legacy compat
+__all__ = ['STYLES', 'LEFT_PANEL_STYLES']
