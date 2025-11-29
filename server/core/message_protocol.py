@@ -58,11 +58,11 @@ class MessageProtocol:
             
             # Convert string type to MessageType enum
             if message_type_str == 'connect':
-                message_type = MessageType.STATUS
+                message_type = MessageType.CONNECT
             elif message_type_str == 'message':
                 message_type = MessageType.MESSAGE
             elif message_type_str == 'disconnect':
-                message_type = MessageType.STATUS
+                message_type = MessageType.DISCONNECT
             else:
                 message_type = MessageType.STATUS  # Default to STATUS
             
