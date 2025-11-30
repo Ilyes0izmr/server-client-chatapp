@@ -4,6 +4,7 @@ import time
 from typing import Dict, Tuple, Optional
 from server.core.server_base import ServerBase, ServerProtocol
 from server.core.message_protocol import MessageProtocol, MessageType
+import json
 
 class UDPServer(ServerBase):
     """UDP Server Implementation"""
@@ -130,13 +131,11 @@ class UDPServer(ServerBase):
                 print(f"🟡 UDP: Invalid message format from {client_addr}")
                 return
             
-            # FIX: Check if message is a tuple and extract properly
+            # FIX: Proper message extraction
             if isinstance(message, tuple):
-                # If it's a tuple, assume it's (message_type, content, sender)
                 message_type_enum, content, sender = message
                 message_type = message_type_enum.value
             elif isinstance(message, dict):
-                # If it's a dict, use the normal approach
                 message_type = message.get('type')
                 content = message.get('content', '')
                 sender = message.get('sender', 'Unknown')
@@ -152,8 +151,10 @@ class UDPServer(ServerBase):
                 self._handle_client_disconnect(client_addr)
             elif message_type == MessageType.MESSAGE.value:
                 self._handle_chat_message(client_addr, content)
+            elif message_type == MessageType.TEST.value:
+                # FIX: Handle TEST messages by echoing back with server username
+                self._handle_test_message(client_addr, message_str) 
             elif message_type == MessageType.STATUS.value:
-                # Handle status messages (like "User aaa connected")
                 print(f"📊 UDP: Status message: {content}")
             else:
                 print(f"🟡 UDP: Unknown message type: {message_type}")
@@ -231,6 +232,33 @@ class UDPServer(ServerBase):
         else:
             print(f"❌ UDP: Message callback not set!")
 
+    def _handle_test_message(self, client_addr: Tuple[str, int], raw_json: str):
+        """Echo TEST message back in exact same format as client expects."""
+        try:
+            # Parse original message to preserve ALL fields (including version, casing)
+            data = json.loads(raw_json)
+
+            # Preserve original type string (likely "test", not "TEST")
+            msg_type = data.get('type', 'test')  # use same casing
+            content = data.get('content', '')
+            timestamp = data.get('timestamp', time.time())
+
+            # Build reply: same structure as client sent, but change username → "server"
+            reply = {
+                "type": msg_type,           # e.g., "test" (lowercase)
+                "content": content,
+                "timestamp": timestamp,
+                "username": "server",       # only change
+                "version": data.get("version", "1.0")  # include version!
+            }
+
+            reply_bytes = json.dumps(reply, separators=(',', ':')).encode('utf-8')
+            self.socket.sendto(reply_bytes, client_addr)
+            self.logger.debug(f"Echoed TEST to {client_addr} (ts={timestamp})")
+
+        except Exception as e:
+            self.logger.error(f"Failed to echo TEST message: {e}")
+
     def _update_client_activity(self, client_addr: Tuple[str, int]):
         """Update client's last seen timestamp."""
         with self._lock:
@@ -245,7 +273,7 @@ class UDPServer(ServerBase):
                 
                 with self._lock:
                     for client_addr, last_seen in self.client_last_seen.items():
-                        if current_time - last_seen > 30:  # 30 second timeout
+                        if current_time - last_seen > 60:  # 30 second timeout
                             disconnected_clients.append(client_addr)
                 
                 for client_addr in disconnected_clients:

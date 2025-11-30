@@ -7,7 +7,7 @@ from server.ui.thread_signals import ThreadSignals
 from server.core.tcp_server import TCPServer
 from server.core.udp_server import UDPServer
 
-
+host_value = 'localhost'
 class ServerMainWindow(QMainWindow):
     """Main server window with complete chat functionality"""
     
@@ -169,7 +169,7 @@ class ServerMainWindow(QMainWindow):
     # Server logic
     def start_tcp_server(self):
         if not self.tcp_server:
-            self.tcp_server = TCPServer(host='192.168.1.33', port=5050)
+            self.tcp_server = TCPServer(host=host_value, port=5050)
             self.tcp_server.set_status_callback(self.thread_safe_server_status)
             self.tcp_server.set_message_callback(self.thread_safe_server_message)
             self.tcp_server.set_client_connected_callback(self.thread_safe_client_connected)
@@ -190,7 +190,7 @@ class ServerMainWindow(QMainWindow):
             
     def start_udp_server(self):
         if not self.udp_server:
-            self.udp_server = UDPServer(host='192.168.1.33', port=5051)
+            self.udp_server = UDPServer(host=host_value, port=5051)
             self.udp_server.set_status_callback(self.thread_safe_server_status)
             self.udp_server.set_message_callback(self.thread_safe_server_message)
             self.udp_server.set_client_connected_callback(self.thread_safe_client_connected)
