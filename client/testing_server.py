@@ -4,7 +4,7 @@ import json
 import time
 
 class SimpleTCPServer:
-    def __init__(self, host='localhost', port=5050):
+    def __init__(self, host='192.168.1.33', port=5050):
         self.host = host
         self.port = port
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
