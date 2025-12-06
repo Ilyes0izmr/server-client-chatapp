@@ -21,6 +21,11 @@ class UDPClient(ClientBase):
         self.sequence_number = 0  # For message ordering
         self.pending_acknowledgements = {}  # For reliable UDP
         self.connection_verified = False  # Track if server is reachable
+        self.max_retries = None  # None means infinite retries
+        self.retransmit_timeout = 2.0  # Time before retransmission
+        self.recovery_mode = False # If true, client is recovering from disconnect
+        self.should_retransmit = False
+        self.retransmit_thread = None
     
     def connect(self) -> bool:
         """Setup UDP socket and verify server is reachable"""
@@ -122,7 +127,7 @@ class UDPClient(ClientBase):
             return False
     
     def _retransmit_loop(self):
-        """Retransmit unacknowledged messages"""
+        """Retransmit unacknowledged messages - INFINITE RETRIES"""
         while self.should_retransmit and self.is_connected:
             current_time = time.time()
             sequences_to_retransmit = []
@@ -132,26 +137,39 @@ class UDPClient(ClientBase):
                 elapsed = current_time - data["sent_time"]
                 
                 if elapsed > self.retransmit_timeout:
-                    if data["retries"] < self.max_retries:
-                        sequences_to_retransmit.append(seq)
-                        data["retries"] += 1
-                        data["sent_time"] = current_time
-                        self.logger.warning(f"Retransmitting seq={seq} (attempt {data['retries']})")
-                    else:
-                        # Max retries reached, give up
-                        self.logger.error(f"Max retries for seq={seq}: {data['content'][:50]}...")
-                        del self.pending_acknowledgements[seq]
+                    sequences_to_retransmit.append(seq)
+                    data["retries"] += 1
+                    data["sent_time"] = current_time
+                    
+                    # Log first few retries, then less frequently
+                    if data["retries"] <= 3 or data["retries"] % 10 == 0:
+                        self.logger.info(f"Retransmitting seq={seq} (attempt {data['retries']})")
+                    
+                    # Enter recovery mode if we're retrying
+                    if not self.recovery_mode:
+                        self.recovery_mode = True
+                        self.logger.warning("Entering recovery mode - connection issues detected")
             
-            # Retransmit
+            # Retransmit messages
             for seq in sequences_to_retransmit:
                 if seq in self.pending_acknowledgements:
                     try:
                         message_data = self.pending_acknowledgements[seq]["message"]
                         self.socket.sendto(message_data, self.server_address)
+                        
+                        # If successful, we might be reconnected
+                        if self.recovery_mode and len(sequences_to_retransmit) > 0:
+                            self.logger.info(f"Recovery attempt for seq={seq}")
+                            
                     except Exception as e:
-                        self.logger.error(f"Retransmit failed seq={seq}: {e}")
+                        self.logger.error(f"Failed to retransmit seq={seq}: {e}")
             
-            time.sleep(0.1)
+            # Exit recovery mode if all ACKs received
+            if self.recovery_mode and not self.pending_acknowledgements:
+                self.recovery_mode = False
+                self.logger.info("Recovery complete - all messages acknowledged")
+            
+            time.sleep(0.5)  # Increased sleep to reduce CPU usage during retries
     
     def send_connect_message(self, username: str) -> bool:
         """Send connection message to server via UDP"""
@@ -257,7 +275,17 @@ class UDPClient(ClientBase):
             self.receive_thread.join(timeout=1.0)
     
     def disconnect(self):
-        """Disconnect UDP client"""
+        """Disconnect UDP client - clear all pending messages"""
+        self.should_retransmit = False
+
+        #Clear all pending messages when disconnecting
+        pending_count = len(self.pending_acknowledgements)
+        if pending_count > 0:
+            self.logger.warning(f"Clearing {pending_count} pending messages on disconnect")
+            self.pending_acknowledgements.clear()
+
+            if self.retransmit_thread and self.retransmit_thread.is_alive():
+                self.retransmit_thread.join(timeout=2.0)
         if self.is_connected and self.connection_verified:
             self.send_disconnect_message()
         

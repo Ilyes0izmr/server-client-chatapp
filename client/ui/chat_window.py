@@ -122,8 +122,21 @@ class ChatWindow(QMainWindow):
     # ----------------------------
 
     def update_status(self, message, ok=True):
-        """Compatibility with old code."""
+        """Update status with retransmission info"""
         icon = "🟣" if ok else "🔴"
+        
+        # Check if client is in recovery mode - FIXED VARIABLE SCOPE
+        try:
+            if hasattr(self, 'client') and self.client:
+                # Check if UDP client has pending_acknowledgements
+                pending_acks = getattr(self.client, 'pending_acknowledgements', {})
+                recovery_mode = getattr(self.client, 'recovery_mode', False)
+                
+                if recovery_mode and len(pending_acks) > 0:
+                    message = f"🔄 Retrying {len(pending_acks)} messages... | {message}"
+        except (AttributeError, TypeError):
+            pass  # Ignore if client doesn't have these attributes
+        
         try:
             self.status.showMessage(f"{icon} {message}")
         except:
