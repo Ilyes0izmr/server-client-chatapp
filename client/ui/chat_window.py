@@ -70,6 +70,11 @@ class ChatWindow(QMainWindow):
         self.disconnect_btn.clicked.connect(self.disconnect)
         header.addWidget(self.disconnect_btn)
 
+        self.test_btn = QPushButton("Test Connection")
+        self.test_btn.setProperty("class", "accent")  # or create new style
+        self.test_btn.clicked.connect(self._run_test)
+        header.addWidget(self.test_btn)
+
         layout.addLayout(header)
 
         # Chat feed
@@ -117,8 +122,21 @@ class ChatWindow(QMainWindow):
     # ----------------------------
 
     def update_status(self, message, ok=True):
-        """Compatibility with old code."""
+        """Update status with retransmission info"""
         icon = "🟣" if ok else "🔴"
+        
+        # Check if client is in recovery mode - FIXED VARIABLE SCOPE
+        try:
+            if hasattr(self, 'client') and self.client:
+                # Check if UDP client has pending_acknowledgements
+                pending_acks = getattr(self.client, 'pending_acknowledgements', {})
+                recovery_mode = getattr(self.client, 'recovery_mode', False)
+                
+                if recovery_mode and len(pending_acks) > 0:
+                    message = f"🔄 Retrying {len(pending_acks)} messages... | {message}"
+        except (AttributeError, TypeError):
+            pass  # Ignore if client doesn't have these attributes
+        
         try:
             self.status.showMessage(f"{icon} {message}")
         except:
@@ -198,7 +216,19 @@ class ChatWindow(QMainWindow):
 
 
 
-
+    def _run_test(self):
+        if hasattr(self, 'client') and self.client and self.client.is_connected:
+            self.update_status("Running connection test...", True)
+            try:
+                
+                self.client.connection_test_calculation()
+                self.update_status("Test completed", True)
+            except Exception as e:
+                self.add_message(f"Test failed: {e}", is_system=True)
+                self.update_status("Test failed", False)
+        else:
+            self.add_message("❌ Not connected — cannot run test", is_system=True)
+            self.update_status("Not connected", False)
     # ----------------------------
     def disconnect(self):
         self.disconnected.emit()

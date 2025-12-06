@@ -4,6 +4,7 @@ import time
 from typing import Dict, Tuple, Optional
 from server.core.server_base import ServerBase, ServerProtocol
 from server.core.message_protocol import MessageProtocol, MessageType
+import json
 
 class UDPServer(ServerBase):
     """UDP Server Implementation"""
@@ -119,47 +120,57 @@ class UDPServer(ServerBase):
                 continue
 
     def _handle_received_data(self, data: bytes, client_addr: Tuple[str, int]):
-        """Handle received UDP data."""
+        """Handle received UDP data with ACKs."""
         try:
             message_str = data.decode('utf-8')
-            message = MessageProtocol.decode_message(message_str)
+            message_type, content, sender = MessageProtocol.decode_message(message_str)
             
-            print(f"🔍 UDP DEBUG: Raw message: {message}")
-            
-            if not message:
-                print(f"🟡 UDP: Invalid message format from {client_addr}")
+            if message_type is None:
+                print(f"🟡 UDP: Invalid message from {client_addr}")
                 return
             
-            # FIX: Check if message is a tuple and extract properly
-            if isinstance(message, tuple):
-                # If it's a tuple, assume it's (message_type, content, sender)
-                message_type_enum, content, sender = message
-                message_type = message_type_enum.value
-            elif isinstance(message, dict):
-                # If it's a dict, use the normal approach
-                message_type = message.get('type')
-                content = message.get('content', '')
-                sender = message.get('sender', 'Unknown')
-            else:
-                print(f"🟡 UDP: Unknown message format: {type(message)}")
-                return
+            print(f"🟢 UDP: Received {message_type.value} from {client_addr}")
             
-            print(f"🟢 UDP: Received {message_type} from {client_addr}: {content}")
-            
-            if message_type == MessageType.CONNECT.value:
-                self._handle_client_connect(client_addr, content or sender)
-            elif message_type == MessageType.DISCONNECT.value:
+            # Handle MESSAGE type - check if it's a reliable message
+            if message_type == MessageType.MESSAGE:
+                sequence, actual_content, test_id = MessageProtocol.extract_reliable_content(content)
+                
+                if sequence is not None:
+                    # This is a reliable message, send ACK
+                    ack_msg = MessageProtocol.create_ack_message(sequence, test_id)
+                    ack_data = ack_msg.encode('utf-8')
+                    self.socket.sendto(ack_data, client_addr)
+                    
+                    print(f"✅ UDP: ACK sent for seq={sequence}")
+                    
+                    # Process the message
+                    if test_id:
+                        # Test message - echo back
+                        self._handle_test_message(client_addr, message_str)
+                    else:
+                        # Regular chat message
+                        self._handle_chat_message(client_addr, actual_content)
+                else:
+                    # Regular MESSAGE (not reliable)
+                    self._handle_chat_message(client_addr, content)
+                    
+            elif message_type == MessageType.CONNECT:
+                self._handle_client_connect(client_addr, sender or "Unknown")
+            elif message_type == MessageType.DISCONNECT:
                 self._handle_client_disconnect(client_addr)
-            elif message_type == MessageType.MESSAGE.value:
-                self._handle_chat_message(client_addr, content)
-            elif message_type == MessageType.STATUS.value:
-                # Handle status messages (like "User aaa connected")
-                print(f"📊 UDP: Status message: {content}")
+            elif message_type == MessageType.TEST:
+                self._handle_test_message(client_addr, message_str)
+            elif message_type == MessageType.STATUS:
+                print(f"📊 UDP: Status: {content}")
+            elif message_type == MessageType.ACK:
+                print(f"📨 UDP: ACK from {client_addr}")
+            elif message_type == MessageType.ERROR:
+                print(f"❌ UDP: Error: {content}")
             else:
-                print(f"🟡 UDP: Unknown message type: {message_type}")
+                print(f"🟡 UDP: Unknown type: {message_type}")
                 
         except Exception as e:
-            print(f"❌ UDP handle data error: {e}")
+            print(f"❌ UDP error: {e}")
             import traceback
             traceback.print_exc()
 
@@ -231,6 +242,33 @@ class UDPServer(ServerBase):
         else:
             print(f"❌ UDP: Message callback not set!")
 
+    def _handle_test_message(self, client_addr: Tuple[str, int], raw_json: str):
+        """Echo TEST message back in exact same format as client expects."""
+        try:
+            # Parse original message to preserve ALL fields (including version, casing)
+            data = json.loads(raw_json)
+
+            # Preserve original type string (likely "test", not "TEST")
+            msg_type = data.get('type', 'test')  # use same casing
+            content = data.get('content', '')
+            timestamp = data.get('timestamp', time.time())
+
+            # Build reply: same structure as client sent, but change username → "server"
+            reply = {
+                "type": msg_type,           # e.g., "test" (lowercase)
+                "content": content,
+                "timestamp": timestamp,
+                "username": "server",       # only change
+                "version": data.get("version", "1.0")  # include version!
+            }
+
+            reply_bytes = json.dumps(reply, separators=(',', ':')).encode('utf-8')
+            self.socket.sendto(reply_bytes, client_addr)
+            self.logger.debug(f"Echoed TEST to {client_addr} (ts={timestamp})")
+
+        except Exception as e:
+            self.logger.error(f"Failed to echo TEST message: {e}")
+
     def _update_client_activity(self, client_addr: Tuple[str, int]):
         """Update client's last seen timestamp."""
         with self._lock:
@@ -245,7 +283,7 @@ class UDPServer(ServerBase):
                 
                 with self._lock:
                     for client_addr, last_seen in self.client_last_seen.items():
-                        if current_time - last_seen > 30:  # 30 second timeout
+                        if current_time - last_seen > 60:  # 30 second timeout
                             disconnected_clients.append(client_addr)
                 
                 for client_addr in disconnected_clients:

@@ -1,7 +1,6 @@
 import sys
 import os
 import logging
-
 # Fix imports - add the current directory to path
 current_dir = os.path.dirname(os.path.abspath(__file__))
 if current_dir not in sys.path:
@@ -9,7 +8,6 @@ if current_dir not in sys.path:
 
 from PyQt6.QtWidgets import QApplication, QMessageBox
 from PyQt6.QtCore import QTimer
-
 from ui.connect_window import ConnectWindow
 from ui.chat_window import ChatWindow
 from core.tcp_client import TCPClient
@@ -107,6 +105,7 @@ class ChatClient:
             self.client.port, 
             self.protocol
         )
+        self.chat_window.client = self.client
         self.chat_window.message_sent.connect(self.handle_message_sent)
         self.chat_window.disconnected.connect(self.handle_disconnect)  # This should work now
         
@@ -129,8 +128,17 @@ class ChatClient:
                 self.chat_window.add_message(message, is_own=True)
                 self.chat_window.update_status("Message sent", True)
             else:
-                self.chat_window.add_message("Failed to send message - check connection", is_system=True)
-                self.chat_window.update_status("Send failed", True)
+                # Check if message is queued for retransmission
+                pending_count = 0
+                if hasattr(self.client, 'pending_acknowledgements'):
+                    pending_count = len(self.client.pending_acknowledgements)
+                
+                if pending_count > 0:
+                    self.chat_window.add_message(f"Message queued ({pending_count} pending)", is_system=True)
+                    self.chat_window.update_status(f"🔄 {pending_count} messages queued", True)
+                else:
+                    self.chat_window.add_message("Failed to send message - check connection", is_system=True)
+                    self.chat_window.update_status("Send failed", False)
         else:
             self.chat_window.add_message("Not connected to server", is_system=True)
     
