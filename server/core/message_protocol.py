@@ -1,6 +1,6 @@
 import json
 import time
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, Tuple
 from enum import Enum
 
 class MessageType(Enum):
@@ -11,6 +11,7 @@ class MessageType(Enum):
     STATUS = "status"
     ERROR = "error"
     TEST = "test"
+    ACK = "ack"  # ADD THIS
 
 class MessageProtocol:
     """Protocol for encoding and decoding chat messages."""
@@ -18,11 +19,8 @@ class MessageProtocol:
     @staticmethod
     def encode_message(message_type: MessageType, content: str, username: str) -> str:
         """Encode a message into JSON string format"""
-        import json
-        import time
-        
         message_data = {
-            "type": message_type.name.lower(),  # "message" or "status"
+            "type": message_type.value,  # Use .value instead of .name.lower()
             "content": content,
             "username": username,
             "timestamp": time.time(),
@@ -30,51 +28,80 @@ class MessageProtocol:
         }
         
         return json.dumps(message_data)
+    
+    @staticmethod
+    def create_ack_message(sequence: int, test_id: str = None) -> str:
+        """Create an acknowledgement message"""
+        content = json.dumps({"sequence": sequence})
+        if test_id:
+            content = json.dumps({"sequence": sequence, "test_id": test_id})
         
+        return MessageProtocol.encode_message(
+            MessageType.ACK,
+            content,
+            "server"
+        )
+    
+    @staticmethod
+    def create_reliable_message(sequence: int, content: str, username: str) -> str:
+        """Create a reliable message with sequence number"""
+        enhanced_content = json.dumps({
+            "sequence": sequence,
+            "data": content
+        })
+        
+        return MessageProtocol.encode_message(
+            MessageType.MESSAGE,
+            enhanced_content,
+            username
+        )
+    
     @staticmethod
     def decode_message(message_str: str):
         """Decode a message string into (message_type, content, sender)"""
         try:
-            print(f"🔍 MESSAGE PROTOCOL DEBUG: Decoding message: {message_str}")
-            
-            # Check if the message starts with unexpected characters
+            # Clean up message string if needed
             if not message_str.startswith('{'):
-                # Try to find the JSON part
                 start_idx = message_str.find('{')
                 if start_idx != -1:
                     message_str = message_str[start_idx:]
-                    print(f"🔍 MESSAGE PROTOCOL DEBUG: Fixed message string: {message_str}")
-                else:
-                    print(f"❌ MESSAGE PROTOCOL DEBUG: No JSON found in message: {message_str}")
-                    return None, "", ""
             
-            # Parse JSON
-            import json
             data = json.loads(message_str)
             
-            # Extract fields with defaults
+            # Extract fields
             message_type_str = data.get('type', '')
             content = data.get('content', '')
             sender = data.get('username', '')
             
             # Convert string type to MessageType enum
-            if message_type_str == 'connect':
-                message_type = MessageType.CONNECT
-            elif message_type_str == 'message':
-                message_type = MessageType.MESSAGE
-            elif message_type_str == 'disconnect':
-                message_type = MessageType.DISCONNECT
-            elif message_type_str == 'test':
-                message_type = MessageType.TEST
-            else:
-                message_type = MessageType.STATUS  # Default to STATUS
+            message_type_map = {
+                'connect': MessageType.CONNECT,
+                'message': MessageType.MESSAGE,
+                'disconnect': MessageType.DISCONNECT,
+                'test': MessageType.TEST,
+                'status': MessageType.STATUS,
+                'error': MessageType.ERROR,
+                'ack': MessageType.ACK  # ADD THIS
+            }
             
-            print(f"🔍 MESSAGE PROTOCOL DEBUG: Decoded - type: {message_type}, content: '{content}', sender: '{sender}'")
+            message_type = message_type_map.get(message_type_str, MessageType.STATUS)
+            
             return message_type, content, sender
             
         except json.JSONDecodeError as e:
-            print(f"❌ MESSAGE PROTOCOL DEBUG: JSON decode error: {e}")
+            print(f"❌ JSON decode error: {e}")
             return None, "", ""
         except Exception as e:
-            print(f"❌ MESSAGE PROTOCOL DEBUG: Error decoding message: {e}")
+            print(f"❌ Error decoding message: {e}")
             return None, "", ""
+    
+    @staticmethod
+    def extract_reliable_content(content: str) -> Tuple[Optional[int], str, Optional[str]]:
+        """Extract sequence number and actual content from reliable message"""
+        try:
+            data = json.loads(content)
+            if "sequence" in data and "data" in data:
+                return data.get("sequence"), data.get("data"), data.get("test_id")
+        except (json.JSONDecodeError, TypeError):
+            pass
+        return None, content, None

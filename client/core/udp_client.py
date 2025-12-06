@@ -1,6 +1,7 @@
 import socket
 import threading
 import time
+import json
 from typing import Callable, Optional
 from .client_base import ClientBase
 from .message_protocol import ChatMessage, MessageType
@@ -78,24 +79,79 @@ class UDPClient(ClientBase):
             return False
     
     def send_message(self, message: str, username: str = None) -> bool:
-        """Send message to server via UDP"""
+        """Send message to server via UDP with reliability"""
         if not self.is_connected or not self.socket or not self.connection_verified:
             self.logger.error("UDP client not properly connected")
             return False
         
         try:
-            chat_message = ChatMessage.create_text_message(message, username)
+            # Assign sequence number
+            sequence = self.sequence_number
+            self.sequence_number += 1
+            
+            # Create reliable message with sequence
+            chat_message = ChatMessage.create_reliable_message(
+                sequence=sequence,
+                content=message,
+                username=username or self.username
+            )
             message_data = chat_message.to_json().encode(self.encoding)
             
-            # For UDP, we just send the datagram
+            # Send message
             bytes_sent = self.socket.sendto(message_data, self.server_address)
-            self.logger.debug(f"UDP message sent: {message} ({bytes_sent} bytes)")
+            
+            # Track for acknowledgement
+            self.pending_acknowledgements[sequence] = {
+                "message": message_data,
+                "sent_time": time.time(),
+                "retries": 0,
+                "content": message
+            }
+            
+            self.logger.debug(f"Reliable UDP message sent (seq={sequence}): {message}")
+            
+            # Start retransmission thread if not running
+            if not self.should_retransmit:
+                self.should_retransmit = True
+                self.retransmit_thread = threading.Thread(target=self._retransmit_loop, daemon=True)
+                self.retransmit_thread.start()
+                
             return True
         except Exception as e:
             self.logger.error(f"Failed to send UDP message: {e}")
-            self.is_connected = False
-            self.connection_verified = False
             return False
+    
+    def _retransmit_loop(self):
+        """Retransmit unacknowledged messages"""
+        while self.should_retransmit and self.is_connected:
+            current_time = time.time()
+            sequences_to_retransmit = []
+            
+            # Check for messages needing retransmission
+            for seq, data in list(self.pending_acknowledgements.items()):
+                elapsed = current_time - data["sent_time"]
+                
+                if elapsed > self.retransmit_timeout:
+                    if data["retries"] < self.max_retries:
+                        sequences_to_retransmit.append(seq)
+                        data["retries"] += 1
+                        data["sent_time"] = current_time
+                        self.logger.warning(f"Retransmitting seq={seq} (attempt {data['retries']})")
+                    else:
+                        # Max retries reached, give up
+                        self.logger.error(f"Max retries for seq={seq}: {data['content'][:50]}...")
+                        del self.pending_acknowledgements[seq]
+            
+            # Retransmit
+            for seq in sequences_to_retransmit:
+                if seq in self.pending_acknowledgements:
+                    try:
+                        message_data = self.pending_acknowledgements[seq]["message"]
+                        self.socket.sendto(message_data, self.server_address)
+                    except Exception as e:
+                        self.logger.error(f"Retransmit failed seq={seq}: {e}")
+            
+            time.sleep(0.1)
     
     def send_connect_message(self, username: str) -> bool:
         """Send connection message to server via UDP"""
@@ -141,20 +197,34 @@ class UDPClient(ClientBase):
                 message_str = data.decode(self.encoding)
                 chat_message = ChatMessage.from_json(message_str)
                 
-                # If server didn't set username, use the address
-                if not chat_message.username and chat_message.type == MessageType.MESSAGE:
-                    chat_message.username = f"Server@{addr[0]}"
+                # Handle ACK messages
+                if chat_message.type == MessageType.ACK:
+                    self._handle_ack_message(chat_message)
+                    return None  # Don't pass ACKs to chat
                 
                 return chat_message
         except socket.timeout:
-            # Expected for UDP - no data available
             pass
         except Exception as e:
             self.logger.error(f"Error receiving UDP message: {e}")
-            self.is_connected = False
-            self.connection_verified = False
         
         return None
+    
+    def _handle_ack_message(self, chat_message: ChatMessage):
+        """Handle acknowledgement from server"""
+        try:
+            ack_data = json.loads(chat_message.content)
+            sequence = ack_data.get("sequence")
+            
+            if sequence is not None and sequence in self.pending_acknowledgements:
+                content = self.pending_acknowledgements[sequence]["content"]
+                del self.pending_acknowledgements[sequence]
+                self.logger.debug(f"ACK for seq={sequence}: {content}")
+                
+                if not self.pending_acknowledgements:
+                    self.should_retransmit = False
+        except json.JSONDecodeError:
+            self.logger.error("Invalid ACK format")
     
     def start_listening(self, callback: Callable[[ChatMessage], None]):
         """Start background thread to listen for UDP messages"""
