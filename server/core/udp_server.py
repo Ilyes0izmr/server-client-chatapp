@@ -120,47 +120,57 @@ class UDPServer(ServerBase):
                 continue
 
     def _handle_received_data(self, data: bytes, client_addr: Tuple[str, int]):
-        """Handle received UDP data."""
+        """Handle received UDP data with ACKs."""
         try:
             message_str = data.decode('utf-8')
-            message = MessageProtocol.decode_message(message_str)
+            message_type, content, sender = MessageProtocol.decode_message(message_str)
             
-            print(f"🔍 UDP DEBUG: Raw message: {message}")
-            
-            if not message:
-                print(f"🟡 UDP: Invalid message format from {client_addr}")
+            if message_type is None:
+                print(f"🟡 UDP: Invalid message from {client_addr}")
                 return
             
-            # FIX: Proper message extraction
-            if isinstance(message, tuple):
-                message_type_enum, content, sender = message
-                message_type = message_type_enum.value
-            elif isinstance(message, dict):
-                message_type = message.get('type')
-                content = message.get('content', '')
-                sender = message.get('sender', 'Unknown')
-            else:
-                print(f"🟡 UDP: Unknown message format: {type(message)}")
-                return
+            print(f"🟢 UDP: Received {message_type.value} from {client_addr}")
             
-            print(f"🟢 UDP: Received {message_type} from {client_addr}: {content}")
-            
-            if message_type == MessageType.CONNECT.value:
-                self._handle_client_connect(client_addr, content or sender)
-            elif message_type == MessageType.DISCONNECT.value:
+            # Handle MESSAGE type - check if it's a reliable message
+            if message_type == MessageType.MESSAGE:
+                sequence, actual_content, test_id = MessageProtocol.extract_reliable_content(content)
+                
+                if sequence is not None:
+                    # This is a reliable message, send ACK
+                    ack_msg = MessageProtocol.create_ack_message(sequence, test_id)
+                    ack_data = ack_msg.encode('utf-8')
+                    self.socket.sendto(ack_data, client_addr)
+                    
+                    print(f"✅ UDP: ACK sent for seq={sequence}")
+                    
+                    # Process the message
+                    if test_id:
+                        # Test message - echo back
+                        self._handle_test_message(client_addr, message_str)
+                    else:
+                        # Regular chat message
+                        self._handle_chat_message(client_addr, actual_content)
+                else:
+                    # Regular MESSAGE (not reliable)
+                    self._handle_chat_message(client_addr, content)
+                    
+            elif message_type == MessageType.CONNECT:
+                self._handle_client_connect(client_addr, sender or "Unknown")
+            elif message_type == MessageType.DISCONNECT:
                 self._handle_client_disconnect(client_addr)
-            elif message_type == MessageType.MESSAGE.value:
-                self._handle_chat_message(client_addr, content)
-            elif message_type == MessageType.TEST.value:
-                # FIX: Handle TEST messages by echoing back with server username
-                self._handle_test_message(client_addr, message_str) 
-            elif message_type == MessageType.STATUS.value:
-                print(f"📊 UDP: Status message: {content}")
+            elif message_type == MessageType.TEST:
+                self._handle_test_message(client_addr, message_str)
+            elif message_type == MessageType.STATUS:
+                print(f"📊 UDP: Status: {content}")
+            elif message_type == MessageType.ACK:
+                print(f"📨 UDP: ACK from {client_addr}")
+            elif message_type == MessageType.ERROR:
+                print(f"❌ UDP: Error: {content}")
             else:
-                print(f"🟡 UDP: Unknown message type: {message_type}")
+                print(f"🟡 UDP: Unknown type: {message_type}")
                 
         except Exception as e:
-            print(f"❌ UDP handle data error: {e}")
+            print(f"❌ UDP error: {e}")
             import traceback
             traceback.print_exc()
 
