@@ -7,7 +7,7 @@ from server.ui.thread_signals import ThreadSignals
 from server.core.tcp_server import TCPServer
 from server.core.udp_server import UDPServer
 
-host_value = '10.137.154.179'
+host_value = 'localhost'
 class ServerMainWindow(QMainWindow):
     """Main server window with complete chat functionality"""
     
