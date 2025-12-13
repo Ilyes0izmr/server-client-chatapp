@@ -5,6 +5,9 @@ from typing import Callable, Optional
 from .client_base import ClientBase
 from .message_protocol import ChatMessage, MessageType
 import matplotlib.pyplot as plt
+import ssl
+from pathlib import Path
+
 
 class TCPClient(ClientBase):
     """TCP client implementation"""
@@ -12,14 +15,83 @@ class TCPClient(ClientBase):
     def __init__(self, host, port, buffer_size=4096, encoding="utf-8", timeout=10):
         super().__init__(host, port, buffer_size, encoding, timeout)
         self.socket = None
+        self.ssl_context = None
+        self.ssl_socket = None
         self.receive_callback = None
         self.receive_thread = None
         self.should_listen = False
         self.lock = threading.Lock()
         self.username = None
         self._recv_buffer = b""
-    
+        
+        # Setup SSL context
+        self._setup_ssl_context()
+
+    def _setup_ssl_context(self):
+        """Setup SSL context for encrypted connections"""
+        try:
+            # Create SSL context
+            self.ssl_context = ssl.create_default_context(ssl.Purpose.SERVER_AUTH)
+            
+            # For self-signed certificates, we need to disable verification
+            # In production, you should use proper certificates and enable verification
+            self.ssl_context.check_hostname = False
+            self.ssl_context.verify_mode = ssl.CERT_NONE
+            
+            # Optional: Load CA certificates for verification
+            # self.ssl_context.load_verify_locations(cafile="certs/server.crt")
+            
+            # Optional: Load client certificate for mutual TLS
+            # certs_dir = Path(__file__).parent.parent.parent / "certs"
+            # if (certs_dir / "client.crt").exists() and (certs_dir / "client.key").exists():
+            #     self.ssl_context.load_cert_chain(
+            #         certfile=str(certs_dir / "client.crt"),
+            #         keyfile=str(certs_dir / "client.key")
+            #     )
+            
+            self.logger.debug("SSL context created successfully")
+            
+        except Exception as e:
+            self.logger.error(f"Failed to setup SSL context: {e}")
+            self.ssl_context = None
+
     def connect(self) -> bool:
+        """Connect to TCP server with SSL"""
+        try:
+            # Create plain TCP socket
+            self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            self.socket.settimeout(self.timeout)
+            
+            # Connect to server
+            self.socket.connect((self.host, self.port))
+            self.logger.info(f"TCP connected to {self.host}:{self.port}")
+            
+            # Wrap socket with SSL
+            if self.ssl_context:
+                try:
+                    self.ssl_socket = self.ssl_context.wrap_socket(
+                        self.socket,
+                        server_hostname=self.host
+                    )
+                    self.logger.info(f"SSL handshake completed with {self.host}")
+                except ssl.SSLError as e:
+                    self.logger.error(f"SSL handshake failed: {e}")
+                    # Fallback to plain TCP (optional)
+                    # self.ssl_socket = self.socket
+                    # self.logger.warning("Falling back to plain TCP")
+                    return False
+            else:
+                self.ssl_socket = self.socket
+                self.logger.warning("SSL context not available, using plain TCP")
+            
+            self.is_connected = True
+            return True
+            
+        except Exception as e:
+            self.logger.error(f"Failed to connect to TCP server: {e}")
+            self.is_connected = False
+            return False
+        
         """Connect to TCP server"""
         try:
             self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -34,8 +106,8 @@ class TCPClient(ClientBase):
             return False
     
     def send_message(self, message: str, username: str = None) -> bool:
-        """Send message to server"""
-        if not self.is_connected or not self.socket:
+        """Send encrypted message to server"""
+        if not self.is_connected or not self.ssl_socket:
             self.logger.error("Not connected to server")
             return False
         
@@ -45,20 +117,24 @@ class TCPClient(ClientBase):
             
             # Send message length first (4 bytes)
             message_len = len(message_data)
-            self.socket.sendall(message_len.to_bytes(4, byteorder='big'))
+            self.ssl_socket.sendall(message_len.to_bytes(4, byteorder='big'))
             
             # Send actual message
-            self.socket.sendall(message_data)
-            self.logger.debug(f"Message sent: {message}")
+            self.ssl_socket.sendall(message_data)
+            self.logger.debug(f"Encrypted message sent: {message}")
             return True
+        except ssl.SSLError as e:
+            self.logger.error(f"SSL error sending message: {e}")
+            self.is_connected = False
+            return False
         except Exception as e:
             self.logger.error(f"Failed to send message: {e}")
             self.is_connected = False
             return False
     
     def send_connect_message(self, username: str) -> bool:
-        """Send connection message to server"""
-        if not self.is_connected or not self.socket:
+        """Send connection message with SSL"""
+        if not self.is_connected or not self.ssl_socket:
             return False
         
         try:
@@ -67,18 +143,21 @@ class TCPClient(ClientBase):
             message_data = chat_message.to_json().encode(self.encoding)
             
             message_len = len(message_data)
-            self.socket.sendall(message_len.to_bytes(4, byteorder='big'))
-            self.socket.sendall(message_data)
+            self.ssl_socket.sendall(message_len.to_bytes(4, byteorder='big'))
+            self.ssl_socket.sendall(message_data)
             
-            self.logger.info(f"Sent connect message for user: {username}")
+            self.logger.info(f"Sent encrypted connect message for user: {username}")
             return True
+        except ssl.SSLError as e:
+            self.logger.error(f"SSL error sending connect message: {e}")
+            return False
         except Exception as e:
             self.logger.error(f"Failed to send connect message: {e}")
             return False
     
     def send_disconnect_message(self) -> bool:
-        """Send disconnect message to server"""
-        if not self.is_connected or not self.socket:
+        """Send disconnect message with SSL"""
+        if not self.is_connected or not self.ssl_socket:
             return False
         
         try:
@@ -86,16 +165,99 @@ class TCPClient(ClientBase):
             message_data = chat_message.to_json().encode(self.encoding)
             
             message_len = len(message_data)
-            self.socket.sendall(message_len.to_bytes(4, byteorder='big'))
-            self.socket.sendall(message_data)
+            self.ssl_socket.sendall(message_len.to_bytes(4, byteorder='big'))
+            self.ssl_socket.sendall(message_data)
             
-            self.logger.info("Sent disconnect message")
+            self.logger.info("Sent encrypted disconnect message")
             return True
+        except ssl.SSLError as e:
+            self.logger.error(f"SSL error sending disconnect message: {e}")
+            return False
         except Exception as e:
             self.logger.error(f"Failed to send disconnect message: {e}")
             return False
     
     def receive_message(self) -> Optional[ChatMessage]:
+        """Receive encrypted message from server"""
+        if not self.is_connected or not self.ssl_socket:
+            return None
+        
+        try:
+            # First receive message length
+            length_data = self.ssl_socket.recv(4)
+            if not length_data:
+                self.logger.debug("Server closed connection")
+                self.is_connected = False
+                return None
+            
+            message_len = int.from_bytes(length_data, byteorder='big')
+            
+            # Receive the actual message
+            received_data = b""
+            while len(received_data) < message_len:
+                chunk = self.ssl_socket.recv(min(self.buffer_size, message_len - len(received_data)))
+                if not chunk:
+                    break
+                received_data += chunk
+            
+            if received_data:
+                message_str = received_data.decode(self.encoding)
+                chat_message = ChatMessage.from_json(message_str)
+                return chat_message
+            
+        except ssl.SSLError as e:
+            self.logger.error(f"SSL error receiving message: {e}")
+            self.is_connected = False
+        except socket.timeout:
+            self.logger.debug("Receive timeout")
+        except ConnectionResetError:
+            self.logger.error("Connection reset by server")
+            self.is_connected = False
+        except Exception as e:
+            self.logger.error(f"Error receiving message: {e}")
+            self.is_connected = False
+        
+        return None
+        """Receive encrypted message from server"""
+        if not self.is_connected or not self.ssl_socket:
+            return None
+        
+        try:
+            # First receive message length
+            length_data = self.ssl_socket.recv(4)
+            if not length_data:
+                self.logger.debug("Server closed connection")
+                self.is_connected = False
+                return None
+            
+            message_len = int.from_bytes(length_data, byteorder='big')
+            
+            # Receive the actual message
+            received_data = b""
+            while len(received_data) < message_len:
+                chunk = self.ssl_socket.recv(min(self.buffer_size, message_len - len(received_data)))
+                if not chunk:
+                    break
+                received_data += chunk
+            
+            if received_data:
+                message_str = received_data.decode(self.encoding)
+                chat_message = ChatMessage.from_json(message_str)
+                return chat_message
+            
+        except ssl.SSLError as e:
+            self.logger.error(f"SSL error receiving message: {e}")
+            self.is_connected = False
+        except socket.timeout:
+            self.logger.debug("Receive timeout")
+        except ConnectionResetError:
+            self.logger.error("Connection reset by server")
+            self.is_connected = False
+        except Exception as e:
+            self.logger.error(f"Error receiving message: {e}")
+            self.is_connected = False
+        
+        return None
         """Receive a single message from server"""
         if not self.is_connected or not self.socket:
             return None
@@ -164,12 +326,25 @@ class TCPClient(ClientBase):
             self.receive_thread.join(timeout=1.0)
     
     def disconnect(self):
-        """Disconnect from server"""
+        """Disconnect from server with SSL cleanup"""
         if self.is_connected:
             self.send_disconnect_message()
         
         self.stop_listening()
         self.is_connected = False
+        
+        # Close SSL socket properly
+        if self.ssl_socket:
+            try:
+                # Send SSL shutdown
+                self.ssl_socket.unwrap()
+                self.ssl_socket.close()
+            except:
+                pass
+            finally:
+                self.ssl_socket = None
+        
+        # Close underlying socket
         if self.socket:
             try:
                 self.socket.close()
@@ -177,11 +352,12 @@ class TCPClient(ClientBase):
                 pass
             finally:
                 self.socket = None
-        self.logger.info("Disconnected from server")
+        
+        self.logger.info("Disconnected from server (SSL)")
 
 
     def connection_test_calculation(self):
-        if not self.is_connected or not self.socket:
+        if not self.is_connected or not self.ssl_socket:
             print("❌ Not connected — aborting test.")
             return
 
@@ -195,14 +371,15 @@ class TCPClient(ClientBase):
                 type=MessageType.TEST,
                 content=f"",
                 timestamp=send_time,
-                username=self.username or "tester"
+                username=self.username or "tester",
+                version="1.0"
             )
 
             # Send
             try:
-                data = test_msg.to_json().encode("utf-8")
-                self.socket.sendall(len(data).to_bytes(4, "big"))
-                self.socket.sendall(data)
+                data = test_msg.to_json().encode(self.encoding)
+                self.ssl_socket.sendall(len(data).to_bytes(4, byteorder="big"))
+                self.ssl_socket.sendall(data)
                 print(f"message sent from client : {data}")
             except Exception as e:
                 all_latencies.append(None)
@@ -214,7 +391,7 @@ class TCPClient(ClientBase):
             reply_msg = None
             while time.time() - start < 1.0:
                 msg = self.receive_message()
-                print(f"raw message from server is {msg}")
+                #print(f"raw message from server is {msg}")
                 if msg and msg.type == MessageType.TEST and msg.username == "server":
                     reply_msg = msg
                     break
